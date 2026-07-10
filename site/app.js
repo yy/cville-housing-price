@@ -70,7 +70,6 @@ map.once("style.load", async () => {
   map.addSource("factors", { type: "geojson", data: "data/factors.geojson" });
   map.addSource("localities", { type: "geojson", data: "data/localities.geojson" });
   map.addSource("surface", { type: "geojson", data: "data/surface.geojson" });
-  map.addSource("bikezone", { type: "geojson", data: "data/bikezone.geojson" });
 
   map.addLayer({
     id: "factor-fill",
@@ -113,17 +112,6 @@ map.once("style.load", async () => {
     source: "localities",
     paint: { "line-color": "#0b0b0b", "line-width": 1.6 },
   });
-  map.addLayer({
-    id: "bikezone-line",
-    type: "line",
-    source: "bikezone",
-    paint: {
-      "line-color": "#0e7a54",
-      "line-width": 1.8,
-      "line-dasharray": [2, 1.6],
-    },
-  });
-
   buildLegend();
   wireModeSwitch();
   wireInteraction();
@@ -325,7 +313,7 @@ async function drawInsight() {
     tooltip.innerHTML =
       `<div class="tt-factor">${usd(t.dataset.p)}/mo · ${usd(t.dataset.a)} all-in</div>` +
       `<div class="tt-sub">${t.dataset.d} mi from downtown/UVA` +
-      `${t.dataset.z === "1" ? " · bikeable urban ring" : ""}</div>`;
+      `${t.dataset.z === "1" ? " · city proper" : ""}</div>`;
     tooltip.hidden = false;
     tooltip.style.left = e.clientX + 14 + "px";
     tooltip.style.top = e.clientY + 14 + "px";

@@ -31,16 +31,6 @@ from .config import (
 UTM = 32617  # UTM 17N, meters
 
 
-def bike_zone(bg: gpd.GeoDataFrame) -> shapely.Geometry:
-    """City proper + Albemarle's contiguous urban Development Areas
-    (comp-plan 'Neighborhood' polygons: Pantops, Places29 south, 5th St...).
-    Crozet/Hollymead-type detached communities are excluded."""
-    city = bg[bg["locality"] == "cville"].union_all()
-    cp = gpd.read_file(f"zip://{RAW / 'alb_compplan.zip'}").to_crs(4326)
-    ring = cp[cp["Type"] == "Neighborhood"].union_all()
-    return shapely.unary_union([city, ring])
-
-
 def bg_distances(sales: pd.DataFrame) -> dict[str, float]:
     """Straight-line miles from each BG's sales-weighted centroid to the
     nearer of downtown / UVA."""
@@ -121,19 +111,6 @@ def main() -> None:
     base_monthly = monthly_payment(ref_price)
     dist = bg_distances(sales)
 
-    # bike zone: city + contiguous county development areas
-    zone = bike_zone(bg)
-    cent = (
-        sales.dropna(subset=["bg_geoid", "lon", "lat"])
-        .groupby("bg_geoid")[["lon", "lat"]]
-        .mean()
-    )
-    in_zone = {g: zone.contains(shapely.Point(x, y)) for g, (x, y) in cent.iterrows()}
-    zone_out = shapely.simplify(zone, 0.0004, preserve_topology=True)
-    gpd.GeoDataFrame(geometry=[zone_out], crs=4326).to_file(
-        SITE_DATA / "bikezone.geojson", driver="GeoJSON"
-    )
-
     rows = []
     for _, g in bg.iterrows():
         geoid, loc = g["GEOID"], g["locality"]
@@ -163,7 +140,7 @@ def main() -> None:
                 "dist_mi": round(dist_mi, 1),
                 "drive_mo": int(round(drive_mo, -1)),
                 "allin_mo": int(round(mo_pay + drive_mo, -1)),
-                "in_zone": bool(in_zone.get(geoid, False)),
+                "in_zone": loc == "cville",  # bikeable = city proper
                 "pooled": pooled,
                 "unit": key,
             }
