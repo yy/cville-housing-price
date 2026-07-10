@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Charlottesville–Albemarle Housing Price Factor</title>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<link href="style.css" rel="stylesheet" />
+</head>
+<body>
+<div id="map"></div>
+
+<header class="panel" id="titlebar">
+  <h1>Housing price factor</h1>
+  <p id="subtitle">Charlottesville City &amp; Albemarle County</p>
+  <p class="explain">
+    How much more (or less) the <em>same house</em> costs in each area,
+    after adjusting for size, age, rooms, lot, type, and quality grade.
+    1.00&nbsp;=&nbsp;metro average.
+  </p>
+  <div class="legend" id="legend"></div>
+  <p class="meta" id="meta"></p>
+</header>
+
+<aside class="panel" id="detail" hidden>
+  <button id="close" aria-label="close">×</button>
+  <h2 id="d-title"></h2>
+  <div class="factor-line"><span id="d-factor"></span><span id="d-ci"></span></div>
+  <table id="d-table"></table>
+  <p class="pooled-note" id="d-pooled" hidden>
+    Few sales here — estimate pooled with neighboring block groups.
+  </p>
+</aside>
+
+<div id="tooltip" hidden></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

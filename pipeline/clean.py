@@ -69,7 +69,7 @@ def clean_cville() -> pd.DataFrame:
 
     # arm's-length screen: price vs current assessment (generous band since
     # older sales predate the current assessment)
-    assess["assessed"] = num(assess["TotalValue"])
+    assess["assessed"] = num(assess["CurrentAssessedValue"])
     df = df.merge(
         assess[["ParcelNumber", "assessed"]].drop_duplicates("ParcelNumber"),
         on="ParcelNumber",

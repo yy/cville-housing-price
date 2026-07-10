@@ -29,11 +29,12 @@ def get_with_retry(url: str, params: dict, tries: int = 5) -> dict:
             r = requests.get(url, params=params, headers=UA, timeout=180)
             r.raise_for_status()
             return r.json()
-        except (requests.Timeout, requests.ConnectionError):
-            if attempt == tries - 1:
+        except (requests.Timeout, requests.ConnectionError, requests.HTTPError) as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if attempt == tries - 1 or (status and status < 500):
                 raise
-            wait = 10 * (attempt + 1)
-            print(f"\n  timeout, retrying in {wait}s")
+            wait = 15 * (attempt + 1)
+            print(f"\n  {type(e).__name__} ({status}), retrying in {wait}s")
             time.sleep(wait)
     raise RuntimeError("unreachable")
 
@@ -55,28 +56,38 @@ def download(url: str, dest: Path, force: bool = False) -> Path:
 
 
 def fetch_arcgis_table(url: str, dest: Path, force: bool = False) -> Path:
-    """Page through an ArcGIS REST table and save all rows as a JSON list."""
+    """Page through an ArcGIS REST table and save all rows as a JSON list.
+
+    Pages on the table's object-id field (`where OID > last`) because this
+    server rejects resultOffset beyond maxRecordCount.
+    """
     if dest.exists() and not force:
         print(f"  cached  {dest.name}")
         return dest
-    rows, offset = [], 0
+    meta = get_with_retry(url, {"f": "json"})
+    oid = meta.get("objectIdField") or next(
+        f["name"] for f in meta["fields"] if f["type"] == "esriFieldTypeOID"
+    )
+    rows, last = [], None
     while True:
         params = {
-            "where": "1=1",
+            "where": "1=1" if last is None else f"{oid} > {last}",
             "outFields": "*",
+            "orderByFields": oid,
             "f": "json",
-            "resultOffset": offset,
             "resultRecordCount": 2000,
         }
         data = get_with_retry(f"{url}/query", params)
         if "error" in data:
             raise RuntimeError(f"ArcGIS error for {url}: {data['error']}")
         feats = data.get("features", [])
-        rows.extend(f["attributes"] for f in feats)
-        print(f"  {dest.stem}: {len(rows)} rows", end="\r")
-        if not data.get("exceededTransferLimit") or not feats:
+        if not feats:
             break
-        offset += len(feats)
+        rows.extend(f["attributes"] for f in feats)
+        last = feats[-1]["attributes"][oid]
+        print(f"  {dest.stem}: {len(rows)} rows", end="\r")
+        if not data.get("exceededTransferLimit") and len(feats) < 2000:
+            break
         time.sleep(0.2)
     dest.write_text(json.dumps(rows))
     print(f"  saved   {dest.name} ({len(rows)} rows)")
