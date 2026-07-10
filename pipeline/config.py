@@ -58,3 +58,8 @@ ACS_BASE = f"https://api.census.gov/data/{ACS_YEAR}/acs/acs5"
 # Modeling window
 SALES_START = "2018-01-01"
 MIN_SALES_PER_BG = 20
+
+# Mortgage assumptions for the $/month translation
+MORTGAGE_RATE = 0.065  # 30-year fixed, annual
+DOWN_PAYMENT = 0.20
+TERM_YEARS = 30

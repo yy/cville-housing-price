@@ -38,6 +38,7 @@ body {
 }
 .legend .bar span { flex: 1; }
 .legend .ticks { display: flex; justify-content: space-between; margin-top: 3px; }
+.legend .assumption { margin-top: 6px; color: var(--muted); }
 
 .meta { margin: 10px 0 0; font-size: 11px; color: var(--muted); }
 

@@ -12,6 +12,7 @@ const DIVERGING = [
 
 const fmt = new Intl.NumberFormat("en-US");
 const usd = (v) => "$" + fmt.format(Math.round(v));
+const delta = (v) => (v >= 0 ? "+" : "−") + usd(Math.abs(v));
 
 const map = new maplibregl.Map({
   container: "map",
@@ -68,17 +69,21 @@ map.once("style.load", async () => {
     paint: { "line-color": "#0b0b0b", "line-width": 1.6 },
   });
 
-  buildLegend();
+  buildLegend(meta);
   wireInteraction();
 });
 
-function buildLegend() {
+function buildLegend(meta) {
   const el = document.getElementById("legend");
   const stops = DIVERGING.map((d) => d[1]).join(",");
+  const dm = (f) => delta(meta.base_monthly * (f - 1)) + "/mo";
   el.innerHTML =
     `<div class="bar" style="background:linear-gradient(to right,${stops})"></div>` +
-    `<div class="ticks"><span>0.65×</span><span>cheaper</span>` +
-    `<span>1.0</span><span>pricier</span><span>1.55×</span></div>`;
+    `<div class="ticks"><span>${dm(0.65)}</span>` +
+    `<span>avg ${usd(meta.base_monthly)}/mo</span><span>${dm(1.55)}</span></div>` +
+    `<div class="assumption">Typical home ≈ ${usd(meta.ref_price)} · ` +
+    `${(meta.mortgage.rate * 100).toFixed(1)}% 30-yr fixed, ` +
+    `${meta.mortgage.down * 100}% down</div>`;
 }
 
 function wireInteraction() {
@@ -91,7 +96,7 @@ function wireInteraction() {
     map.setFilter("factor-hover", ["==", ["get", "GEOID"], p.GEOID]);
     if (p.factor == null) { tooltip.hidden = true; return; }
     tooltip.innerHTML =
-      `<div class="tt-factor">${(+p.factor).toFixed(2)}×</div>` +
+      `<div class="tt-factor">${(+p.factor).toFixed(2)}× · ${delta(p.mo_delta)}/mo</div>` +
       `<div class="tt-sub">${usd(p.median_ppsf)}/sqft · ${p.n_sales} sales</div>`;
     tooltip.hidden = false;
     tooltip.style.left = e.originalEvent.clientX + 14 + "px";
@@ -113,6 +118,9 @@ function wireInteraction() {
     document.getElementById("d-ci").textContent =
       `95% CI ${(+p.factor_lo).toFixed(2)}–${(+p.factor_hi).toFixed(2)}`;
     document.getElementById("d-table").innerHTML = [
+      ["Typical home here", usd(p.est_price)],
+      ["Monthly payment", usd(p.mo_pay) + "/mo"],
+      ["vs. metro average", delta(p.mo_delta) + "/mo"],
       ["Median sale price", usd(p.median_price)],
       ["Median $/sqft", usd(p.median_ppsf)],
       ["Median size", fmt.format(p.median_sqft) + " sqft"],
