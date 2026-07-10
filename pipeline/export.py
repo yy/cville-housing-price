@@ -143,7 +143,18 @@ def main() -> None:
             }
         )
 
-    out = bg.merge(pd.DataFrame(rows), on="GEOID", suffixes=("", "_x"))
+    rows_df = pd.DataFrame(rows)
+    rent_path = PROCESSED / "rent_bg.parquet"
+    if rent_path.exists():
+        rent = pd.read_parquet(rent_path)
+        rent = rent[["bg_geoid", "acs_rent", "rent_factor", "pred_rent", "renters"]]
+        rent["rent_factor"] = rent["rent_factor"].round(3)
+        rent["pred_rent"] = rent["pred_rent"].round(0)
+        rows_df = rows_df.merge(
+            rent, left_on="GEOID", right_on="bg_geoid", how="left"
+        ).drop(columns="bg_geoid")
+
+    out = bg.merge(rows_df, on="GEOID", suffixes=("", "_x"))
     out["geometry"] = out["geometry"].simplify(0.0002, preserve_topology=True)
     out = out.drop(columns=[c for c in out.columns if c.endswith("_x")])
     out.to_file(SITE_DATA / "factors.geojson", driver="GeoJSON")

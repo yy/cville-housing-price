@@ -56,7 +56,7 @@ body {
 #d-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 .pooled-note { font-size: 11.5px; color: var(--muted); margin: 8px 0 0; }
 
-#mode { display: flex; gap: 6px; margin: 0 0 10px; }
+#mode { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0 0 10px; }
 #mode button {
   flex: 1;
   font: inherit;

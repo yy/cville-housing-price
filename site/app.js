@@ -17,6 +17,14 @@ const SEQUENTIAL = [
   [3200, "#256abf"],
   [3600, "#0d366b"],
 ];
+// sequential aqua for ACS median gross rent
+const RENT_SEQ = [
+  [800, "#d6f0e5"],
+  [1200, "#9adfc4"],
+  [1600, "#4cc39a"],
+  [2000, "#149268"],
+  [2500, "#07523a"],
+];
 
 const fmt = new Intl.NumberFormat("en-US");
 const usd = (v) => "$" + fmt.format(Math.round(v));
@@ -34,20 +42,22 @@ const map = new maplibregl.Map({
 });
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }));
 
-const fillColor = () =>
-  MODE === "factor"
-    ? [
-        "case",
-        ["==", ["get", "factor"], null],
-        "rgba(0,0,0,0.04)",
-        ["interpolate", ["linear"], ["get", "factor"], ...DIVERGING.flat()],
-      ]
-    : [
-        "case",
-        ["==", ["get", "factor"], null],
-        "rgba(0,0,0,0.04)",
-        ["interpolate", ["linear"], ["get", "allin_mo"], ...SEQUENTIAL.flat()],
-      ];
+const RAMPS = {
+  factor: ["factor", DIVERGING],
+  allin: ["allin_mo", SEQUENTIAL],
+  rent: ["acs_rent", RENT_SEQ],
+  rentfactor: ["rent_factor", DIVERGING],
+};
+
+const fillColor = () => {
+  const [prop, ramp] = RAMPS[MODE];
+  return [
+    "case",
+    ["==", ["get", prop], null],
+    "rgba(0,0,0,0.04)",
+    ["interpolate", ["linear"], ["get", prop], ...ramp.flat()],
+  ];
+};
 
 map.on("error", (e) => console.log("[app] map error:", e.error && e.error.message));
 map.once("style.load", async () => {
@@ -106,7 +116,7 @@ function buildLegend() {
       `<div class="assumption">Typical home ≈ ${usd(META.ref_price)} · ` +
       `${(META.mortgage.rate * 100).toFixed(1)}% 30-yr fixed, ` +
       `${META.mortgage.down * 100}% down</div>`;
-  } else {
+  } else if (MODE === "allin") {
     const stops = SEQUENTIAL.map((d) => d[1]).join(",");
     el.innerHTML =
       `<div class="bar" style="background:linear-gradient(to right,${stops})"></div>` +
@@ -115,6 +125,21 @@ function buildLegend() {
       `<div class="assumption">Mortgage + driving for one downtown commuter · ` +
       `$${META.commute.cost_per_mile.toFixed(2)}/mile, ` +
       `${META.commute.days_per_month} days/mo</div>`;
+  } else if (MODE === "rent") {
+    const stops = RENT_SEQ.map((d) => d[1]).join(",");
+    el.innerHTML =
+      `<div class="bar" style="background:linear-gradient(to right,${stops})"></div>` +
+      `<div class="ticks"><span>${usd(800)}/mo</span><span></span>` +
+      `<span>${usd(2500)}/mo</span></div>` +
+      `<div class="assumption">ACS 2019–23 median gross rent (incl. utilities) · ` +
+      `gray = too few renters to estimate</div>`;
+  } else {
+    const stops = DIVERGING.map((d) => d[1]).join(",");
+    el.innerHTML =
+      `<div class="bar" style="background:linear-gradient(to right,${stops})"></div>` +
+      `<div class="ticks"><span>0.65×</span><span>1.0 = expected</span><span>1.55×</span></div>` +
+      `<div class="assumption">Observed rent ÷ rent expected from the housing stock ` +
+      `(bedrooms, type, age; ACS + PUMS)</div>`;
   }
 }
 
@@ -141,11 +166,14 @@ function wireInteraction() {
     const p = e.features[0].properties;
     map.getCanvas().style.cursor = "pointer";
     map.setFilter("factor-hover", ["==", ["get", "GEOID"], p.GEOID]);
-    if (p.factor == null) { tooltip.hidden = true; return; }
-    const head =
-      MODE === "factor"
-        ? `${(+p.factor).toFixed(2)}× · ${delta(p.mo_delta)}/mo`
-        : `${usd(p.allin_mo)}/mo all-in`;
+    const prop = RAMPS[MODE][0];
+    if (p[prop] == null) { tooltip.hidden = true; return; }
+    const head = {
+      factor: () => `${(+p.factor).toFixed(2)}× · ${delta(p.mo_delta)}/mo`,
+      allin: () => `${usd(p.allin_mo)}/mo all-in`,
+      rent: () => `${usd(p.acs_rent)}/mo median rent`,
+      rentfactor: () => `${(+p.rent_factor).toFixed(2)}× rent factor`,
+    }[MODE]();
     tooltip.innerHTML =
       `<div class="tt-factor">${head}</div>` +
       `<div class="tt-sub">${usd(p.median_ppsf)}/sqft · ${p.dist_mi} mi out · ${p.n_sales} sales</div>`;
@@ -178,6 +206,10 @@ function wireInteraction() {
       ["Median sale price", usd(p.median_price)],
       ["Median $/sqft", usd(p.median_ppsf)],
       ["Sales in window", fmt.format(p.n_sales)],
+      ...(p.acs_rent != null ? [["Median rent (ACS)", usd(p.acs_rent) + "/mo"]] : []),
+      ...(p.rent_factor != null
+        ? [["Rent factor", (+p.rent_factor).toFixed(2) + "×"]]
+        : []),
     ]
       .map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`)
       .join("");
