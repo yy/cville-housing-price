@@ -18,9 +18,22 @@
     after adjusting for size, age, rooms, lot, type, and quality grade.
     1.00&nbsp;=&nbsp;metro average.
   </p>
+  <div id="mode">
+    <button data-mode="factor" class="active">Price factor</button>
+    <button data-mode="allin">All-in $/mo (+ driving)</button>
+  </div>
   <div class="legend" id="legend"></div>
   <p class="meta" id="meta"></p>
 </header>
+
+<aside class="panel" id="insight">
+  <h2>The cost of distance</h2>
+  <p class="explain">
+    Monthly cost of the typical home vs. distance from downtown/UVA —
+    with and without the cost of one car commute.
+  </p>
+  <svg id="chart" role="img" aria-label="Housing and all-in monthly cost by distance"></svg>
+</aside>
 
 <aside class="panel" id="detail" hidden>
   <button id="close" aria-label="close">×</button>

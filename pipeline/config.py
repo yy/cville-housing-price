@@ -63,3 +63,12 @@ MIN_SALES_PER_BG = 20
 MORTGAGE_RATE = 0.065  # 30-year fixed, annual
 DOWN_PAYMENT = 0.20
 TERM_YEARS = 30
+
+# Job-center anchors for distance/commute analysis (lon, lat)
+DOWNTOWN = (-78.4769, 38.0293)  # Downtown Mall
+UVA = (-78.5034, 38.0355)  # Rotunda
+
+# Commute-cost assumptions (single commuter, workdays only)
+COST_PER_MILE = 0.70  # IRS-style all-in vehicle cost per mile
+COMMUTE_DAYS_PER_MONTH = 22
+BIKE_RANGE_MI = 3.0  # what counts as comfortably bikeable

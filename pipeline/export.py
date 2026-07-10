@@ -8,18 +8,50 @@ import json
 
 import geopandas as gpd
 import pandas as pd
+import shapely
 
 from .config import (
+    BIKE_RANGE_MI,
     CITY_FIPS,
+    COMMUTE_DAYS_PER_MONTH,
+    COST_PER_MILE,
     COUNTY_FIPS,
     DOWN_PAYMENT,
+    DOWNTOWN,
     MORTGAGE_RATE,
     PROCESSED,
     RAW,
     SITE_DATA,
     STATE_FIPS,
     TERM_YEARS,
+    UVA,
 )
+
+UTM = 32617  # UTM 17N, meters
+
+
+def bg_distances(sales: pd.DataFrame) -> dict[str, float]:
+    """Straight-line miles from each BG's sales-weighted centroid to the
+    nearer of downtown / UVA."""
+    cent = (
+        sales.dropna(subset=["bg_geoid", "lon", "lat"])
+        .groupby("bg_geoid")[["lon", "lat"]]
+        .mean()
+        .reset_index()
+    )
+    pts = gpd.GeoDataFrame(
+        cent, geometry=gpd.points_from_xy(cent["lon"], cent["lat"]), crs=4326
+    ).to_crs(UTM)
+    anchors = gpd.GeoSeries(
+        [shapely.Point(DOWNTOWN), shapely.Point(UVA)], crs=4326
+    ).to_crs(UTM)
+    meters = pd.concat([pts.geometry.distance(a) for a in anchors], axis=1).min(axis=1)
+    return dict(zip(cent["bg_geoid"], meters * 0.000621371))
+
+
+def driving_cost(dist_mi: float) -> float:
+    """Monthly cost of commuting that distance by car (round trips)."""
+    return dist_mi * 2 * COMMUTE_DAYS_PER_MONTH * COST_PER_MILE
 
 
 def monthly_payment(price: float) -> float:
@@ -76,16 +108,19 @@ def main() -> None:
     ref_price = float((recent["sale_price"] / recent["factor"]).median())
 
     base_monthly = monthly_payment(ref_price)
+    dist = bg_distances(sales)
     rows = []
     for _, g in bg.iterrows():
         geoid, loc = g["GEOID"], g["locality"]
         r, key, pooled = area_row(geoid, loc)
-        if r is None:
+        if r is None or geoid not in dist:
             rows.append({"GEOID": geoid, "locality": loc, "factor": None})
             continue
         factor = float(r["factor"])
         est_price = ref_price * factor
         mo_pay = monthly_payment(est_price)
+        dist_mi = dist[geoid]
+        drive_mo = driving_cost(dist_mi)
         rows.append(
             {
                 "GEOID": geoid,
@@ -100,6 +135,9 @@ def main() -> None:
                 "est_price": int(round(est_price, -3)),
                 "mo_pay": int(round(mo_pay, -1)),
                 "mo_delta": int(round(mo_pay - base_monthly, -1)),
+                "dist_mi": round(dist_mi, 1),
+                "drive_mo": int(round(drive_mo, -1)),
+                "allin_mo": int(round(mo_pay + drive_mo, -1)),
                 "pooled": pooled,
                 "unit": key,
             }
@@ -117,6 +155,29 @@ def main() -> None:
         SITE_DATA / "localities.geojson", driver="GeoJSON"
     )
 
+    # cost-of-distance chart data: per-BG dots + sales-weighted binned medians
+    df = pd.DataFrame(rows).dropna(subset=["factor"])
+    df["bin"] = (df["dist_mi"] // 2 * 2).astype(int)
+    bins = []
+    for b, grp in df.groupby("bin"):
+        w = grp["n_sales"]
+        bins.append(
+            {
+                "mi": int(b) + 1,
+                "housing": int((grp["mo_pay"] * w).sum() / w.sum()),
+                "allin": int((grp["allin_mo"] * w).sum() / w.sum()),
+                "n": int(w.sum()),
+            }
+        )
+    insight = {
+        "bike_range_mi": BIKE_RANGE_MI,
+        "bins": bins,
+        "bgs": df[
+            ["GEOID", "locality", "dist_mi", "mo_pay", "allin_mo", "n_sales"]
+        ].to_dict("records"),
+    }
+    (SITE_DATA / "insight.json").write_text(json.dumps(insight))
+
     stats = json.loads((PROCESSED / "model_stats.json").read_text())
     stats["built"] = pd.Timestamp.now().strftime("%Y-%m-%d")
     stats["ref_price"] = int(round(ref_price, -3))
@@ -125,6 +186,11 @@ def main() -> None:
         "rate": MORTGAGE_RATE,
         "down": DOWN_PAYMENT,
         "term_years": TERM_YEARS,
+    }
+    stats["commute"] = {
+        "cost_per_mile": COST_PER_MILE,
+        "days_per_month": COMMUTE_DAYS_PER_MONTH,
+        "bike_range_mi": BIKE_RANGE_MI,
     }
     stats["localities"] = {
         loc: {

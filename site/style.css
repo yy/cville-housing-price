@@ -56,6 +56,43 @@ body {
 #d-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 .pooled-note { font-size: 11.5px; color: var(--muted); margin: 8px 0 0; }
 
+#mode { display: flex; gap: 6px; margin: 0 0 10px; }
+#mode button {
+  flex: 1;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+#mode button.active {
+  background: #0b0b0b;
+  color: #fff;
+  border-color: #0b0b0b;
+}
+
+#insight { bottom: 12px; left: 12px; width: 320px; }
+#insight h2 { margin: 0 0 4px; font-size: 14px; }
+#insight .explain { margin-bottom: 6px; }
+#chart { width: 100%; height: auto; display: block; }
+.c-grid { stroke: #e1e0d9; stroke-width: 1; }
+.c-tick, .c-band { font-size: 9px; fill: #898781; }
+.c-dot { fill: #898781; opacity: 0.45; }
+.c-dot:hover { opacity: 1; }
+.c-line { fill: none; stroke-width: 2; stroke-linejoin: round; }
+.c-housing { stroke: #2a78d6; }
+.c-allin { stroke: #eb6834; }
+.c-lab { font-size: 10px; font-weight: 600; }
+.c-lab-housing { fill: #1c5cab; }
+.c-lab-allin { fill: #b84a1e; }
+
+@media (max-width: 900px) {
+  #insight { display: none; }
+}
+
 #tooltip {
   position: fixed;
   pointer-events: none;
