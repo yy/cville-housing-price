@@ -1,0 +1,22 @@
+[project]
+name = "cville-housing-price"
+version = "0.1.0"
+description = "Quality-adjusted housing price index for Charlottesville City and Albemarle County"
+requires-python = ">=3.13"
+dependencies = [
+    "pandas",
+    "geopandas",
+    "pyfixest",
+    "requests",
+    "openpyxl",
+    "pyarrow",
+]
+
+[dependency-groups]
+dev = ["ruff", "pytest"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
