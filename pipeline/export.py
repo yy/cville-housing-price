@@ -7,6 +7,7 @@ Every block group is rendered; a BG whose factor was pooled up to its tract
 import json
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import shapely
 
@@ -140,6 +141,7 @@ def main() -> None:
                 "dist_mi": round(dist_mi, 1),
                 "drive_mo": int(round(drive_mo, -1)),
                 "allin_mo": int(round(mo_pay + drive_mo, -1)),
+                "allin2_mo": int(round(mo_pay + 2 * drive_mo, -1)),
                 "in_zone": loc == "cville",  # bikeable = city proper
                 "pooled": pooled,
                 "unit": key,
@@ -169,28 +171,37 @@ def main() -> None:
         SITE_DATA / "localities.geojson", driver="GeoJSON"
     )
 
-    # cost-of-distance chart data: per-BG dots + sales-weighted binned means
-    # (2-mile bins near town, wider bins where rural data thins out)
+    # cost-of-distance chart data: per-BG dots + sales-weighted LOESS curves
     df = pd.DataFrame(rows).dropna(subset=["factor"])
-    edges = [0, 2, 4, 6, 8, 10, 12, 16, 22]
-    df["bin"] = pd.cut(df["dist_mi"], edges, right=False)
-    bins = []
-    for b, grp in df.groupby("bin", observed=True):
-        w = grp["n_sales"]
-        if w.sum() < 30:
-            continue
-        bins.append(
-            {
-                "mi": round((b.left + b.right) / 2, 1),
-                "housing": int((grp["mo_pay"] * w).sum() / w.sum()),
-                "allin": int((grp["allin_mo"] * w).sum() / w.sum()),
-                "n": int(w.sum()),
-            }
-        )
+
+    def loess(xcol, ycol, grid, h=4.0):
+        """Tricube-weighted local linear regression, weighted by n_sales."""
+        x = df[xcol].to_numpy(float)
+        y = df[ycol].to_numpy(float)
+        w0 = df["n_sales"].to_numpy(float)
+        out = []
+        for x0 in grid:
+            d = np.abs(x - x0) / h
+            w = np.where(d < 1, (1 - d**3) ** 3, 0) * w0
+            if w.sum() < 30:
+                out.append(None)
+                continue
+            X = np.column_stack([np.ones_like(x), x - x0])
+            beta = np.linalg.lstsq(X * w[:, None] ** 0.5, y * w**0.5, rcond=None)[0]
+            out.append(round(float(beta[0])))
+        return out
+
+    grid = np.arange(0.5, min(df["dist_mi"].max(), 20) + 0.01, 0.5)
+    curves = {
+        "mi": [round(g, 1) for g in grid],
+        "housing": loess("dist_mi", "mo_pay", grid),
+        "allin": loess("dist_mi", "allin_mo", grid),
+        "allin2": loess("dist_mi", "allin2_mo", grid),
+    }
     insight = {
         "bike_range_mi": BIKE_RANGE_MI,
         "ebike_range_mi": EBIKE_RANGE_MI,
-        "bins": bins,
+        "curves": curves,
         "bgs": df[
             ["GEOID", "locality", "dist_mi", "mo_pay", "allin_mo", "n_sales", "in_zone"]
         ].to_dict("records"),

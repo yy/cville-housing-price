@@ -95,9 +95,11 @@ body {
 .c-line { fill: none; stroke-width: 2; stroke-linejoin: round; }
 .c-housing { stroke: #2a78d6; }
 .c-allin { stroke: #eb6834; }
+.c-allin2 { stroke: #4a3aa7; }
 .c-lab { font-size: 10px; font-weight: 600; }
 .c-lab-housing { fill: #1c5cab; }
 .c-lab-allin { fill: #b84a1e; }
+.c-lab-allin2 { fill: #4a3aa7; }
 
 @media (max-width: 900px) {
   #insight { display: none; }

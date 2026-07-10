@@ -70,16 +70,19 @@ const fillColor = () => {
 
 map.on("error", (e) => console.log("[app] map error:", e.error && e.error.message));
 map.once("style.load", async () => {
-  META = await fetch("data/meta.json").then((r) => r.json());
+  META = await fetch("data/meta.json", { cache: "no-cache" }).then((r) =>
+    r.json()
+  );
+  window.__v = "?v=" + encodeURIComponent(META.built);
   document.getElementById("meta").textContent =
     `${fmt.format(META.n_sales)} sales ${META.window[0].slice(0, 4)}–` +
     `${META.window[1].slice(0, 4)} · hedonic model R² ${META.r2.toFixed(2)}` +
     ` · built ${META.built}`;
 
-  map.addSource("factors", { type: "geojson", data: "data/factors.geojson" });
-  map.addSource("localities", { type: "geojson", data: "data/localities.geojson" });
-  map.addSource("surface", { type: "geojson", data: "data/surface.geojson" });
-  map.addSource("zori", { type: "geojson", data: "data/zori.geojson" });
+  map.addSource("factors", { type: "geojson", data: "data/factors.geojson" + window.__v });
+  map.addSource("localities", { type: "geojson", data: "data/localities.geojson" + window.__v });
+  map.addSource("surface", { type: "geojson", data: "data/surface.geojson" + window.__v });
+  map.addSource("zori", { type: "geojson", data: "data/zori.geojson" + window.__v });
 
   map.addLayer({
     id: "factor-fill",
@@ -296,7 +299,8 @@ function wireInteraction() {
       ["vs. metro average", delta(p.mo_delta) + "/mo"],
       ["Distance to jobs", p.dist_mi + " mi"],
       ["Est. driving cost", usd(p.drive_mo) + "/mo"],
-      ["All-in monthly", usd(p.allin_mo) + "/mo"],
+      ["All-in (1 car)", usd(p.allin_mo) + "/mo"],
+      ["All-in (2 cars)", usd(p.allin2_mo) + "/mo"],
       ["Median sale price", usd(p.median_price)],
       ["Median $/sqft", usd(p.median_ppsf)],
       ["Sales in window", fmt.format(p.n_sales)],
@@ -316,7 +320,7 @@ function wireInteraction() {
 /* -------------------------------------------------- cost-of-distance chart */
 
 async function drawInsight() {
-  const data = await fetch("data/insight.json").then((r) => r.json());
+  const data = await fetch("data/insight.json" + window.__v).then((r) => r.json());
   const svg = document.getElementById("chart");
   const W = 300, H = 190, m = { l: 44, r: 16, t: 12, b: 26 };
   const xmax = 20, ymin = 1600, ymax = 3400;
@@ -347,19 +351,32 @@ async function drawInsight() {
       data-g="${b.GEOID}" data-p="${b.mo_pay}" data-a="${b.allin_mo}" data-d="${b.dist_mi}" data-z="${b.in_zone ? 1 : 0}"/>`;
   }
   if (off) {
-    s += `<text x="${W - m.r}" y="${m.t + 8}" class="c-tick" text-anchor="end">▲ ${off} pricier areas off scale</text>`;
+    s += `<text x="${W - m.r}" y="${H - m.b - 4}" class="c-tick" text-anchor="end">▲ ${off} pricier areas off scale</text>`;
   }
 
-  // binned lines
-  const solid = data.bins;
-  const line = (key) =>
-    solid.map((b, i) => `${i ? "L" : "M"}${x(b.mi)},${y(b[key])}`).join("");
+  // LOESS curves
+  const c = data.curves;
+  const line = (key) => {
+    let d = "", pen = false;
+    for (let i = 0; i < c.mi.length; i++) {
+      if (c[key][i] == null) { pen = false; continue; }
+      d += `${pen ? "L" : "M"}${x(c.mi[i])},${y(c[key][i])}`;
+      pen = true;
+    }
+    return d;
+  };
+  s += `<path d="${line("allin2")}" class="c-line c-allin2"/>`;
   s += `<path d="${line("allin")}" class="c-line c-allin"/>`;
   s += `<path d="${line("housing")}" class="c-line c-housing"/>`;
 
-  const last = solid[solid.length - 1];
-  s += `<text x="${x(last.mi) - 2}" y="${y(last.housing) + 12}" class="c-lab c-lab-housing" text-anchor="end">housing</text>`;
-  s += `<text x="${x(last.mi) - 2}" y="${y(last.allin) - 6}" class="c-lab c-lab-allin" text-anchor="end">+ driving</text>`;
+  const at = c.mi.indexOf(16) >= 0 ? c.mi.indexOf(16) : c.mi.length - 4;
+  for (const [key, cls, dy, label] of [
+    ["housing", "c-lab-housing", 14, "housing"],
+    ["allin", "c-lab-allin", -7, "+ 1 car"],
+    ["allin2", "c-lab-allin2", -7, "+ 2 cars"],
+  ]) {
+    s += `<text x="${x(c.mi[at])}" y="${y(c[key][at]) + dy}" class="c-lab ${cls}" text-anchor="middle">${label}</text>`;
+  }
 
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   svg.innerHTML = s;
