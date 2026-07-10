@@ -30,6 +30,7 @@ ALBEMARLE_FILES = {
     "alb_parcel_info": "https://albgis.albemarle.org/gisdata/CAMA/GIS_View_Redacted_ParcelInfo_TXT.zip",
     "alb_other_chars": "https://albgis.albemarle.org/gisdata/CAMA/CityView_View_OtherParcelCharacteristics_TXT.zip",
     "alb_parcels_shape": "https://albgis.albemarle.org/gisdata/Parcels/shape/parcels_shape_current.zip",
+    "alb_compplan": "https://albgis.albemarle.org/gisdata/CompPlan/Comp_Plan_Areas.zip",
 }
 
 # Census TIGER/Line boundaries
@@ -71,4 +72,10 @@ UVA = (-78.5034, 38.0355)  # Rotunda
 # Commute-cost assumptions (single commuter, workdays only)
 COST_PER_MILE = 0.70  # IRS-style all-in vehicle cost per mile
 COMMUTE_DAYS_PER_MONTH = 22
-BIKE_RANGE_MI = 3.0  # what counts as comfortably bikeable
+BIKE_RANGE_MI = 3.0  # classic-bike comfort radius (chart context only)
+EBIKE_RANGE_MI = 6.0  # e-bike comfort radius (chart context only)
+
+# Fine-grained smoothed surface
+SURFACE_CELL_M = 500  # grid cell size
+SURFACE_BW_M = 800  # gaussian kernel bandwidth
+SURFACE_MIN_N = 8  # min effective sample per cell

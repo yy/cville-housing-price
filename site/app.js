@@ -69,12 +69,30 @@ map.once("style.load", async () => {
 
   map.addSource("factors", { type: "geojson", data: "data/factors.geojson" });
   map.addSource("localities", { type: "geojson", data: "data/localities.geojson" });
+  map.addSource("surface", { type: "geojson", data: "data/surface.geojson" });
+  map.addSource("bikezone", { type: "geojson", data: "data/bikezone.geojson" });
 
   map.addLayer({
     id: "factor-fill",
     type: "fill",
     source: "factors",
     paint: { "fill-color": fillColor(), "fill-opacity": 0.78 },
+  });
+  map.addLayer({
+    id: "surface-fill",
+    type: "fill",
+    source: "surface",
+    layout: { visibility: "none" },
+    paint: {
+      "fill-color": [
+        "interpolate",
+        ["linear"],
+        ["get", "factor_fine"],
+        ...DIVERGING.flat(),
+      ],
+      "fill-opacity": 0.82,
+      "fill-antialias": false,
+    },
   });
   map.addLayer({
     id: "factor-line",
@@ -95,12 +113,29 @@ map.once("style.load", async () => {
     source: "localities",
     paint: { "line-color": "#0b0b0b", "line-width": 1.6 },
   });
+  map.addLayer({
+    id: "bikezone-line",
+    type: "line",
+    source: "bikezone",
+    paint: {
+      "line-color": "#0e7a54",
+      "line-width": 1.8,
+      "line-dasharray": [2, 1.6],
+    },
+  });
 
   buildLegend();
   wireModeSwitch();
   wireInteraction();
   drawInsight();
 });
+
+function syncSurface() {
+  const fine = document.getElementById("fine").checked && MODE === "factor";
+  map.setLayoutProperty("surface-fill", "visibility", fine ? "visible" : "none");
+  map.setLayoutProperty("factor-fill", "visibility", fine ? "none" : "visible");
+  map.setLayoutProperty("factor-line", "visibility", fine ? "none" : "visible");
+}
 
 /* ---------------------------------------------------------------- legend */
 
@@ -151,9 +186,13 @@ function wireModeSwitch() {
         .querySelectorAll("#mode button")
         .forEach((x) => x.classList.toggle("active", x === b));
       map.setPaintProperty("factor-fill", "fill-color", fillColor());
+      document.getElementById("fine-wrap").style.display =
+        MODE === "factor" ? "" : "none";
+      syncSurface();
       buildLegend();
     };
   });
+  document.getElementById("fine").onchange = syncSurface;
 }
 
 /* ----------------------------------------------------------- interaction */
@@ -181,6 +220,16 @@ function wireInteraction() {
     tooltip.style.left = e.originalEvent.clientX + 14 + "px";
     tooltip.style.top = e.originalEvent.clientY + 14 + "px";
   });
+  map.on("mousemove", "surface-fill", (e) => {
+    const f = e.features[0].properties.factor_fine;
+    tooltip.innerHTML =
+      `<div class="tt-factor">${(+f).toFixed(2)}× · ${delta(META.base_monthly * (f - 1))}/mo</div>` +
+      `<div class="tt-sub">smoothed local estimate</div>`;
+    tooltip.hidden = false;
+    tooltip.style.left = e.originalEvent.clientX + 14 + "px";
+    tooltip.style.top = e.originalEvent.clientY + 14 + "px";
+  });
+  map.on("mouseleave", "surface-fill", () => (tooltip.hidden = true));
   map.on("movestart", () => (tooltip.hidden = true));
   map.on("mouseleave", "factor-fill", () => {
     map.getCanvas().style.cursor = "";
@@ -230,9 +279,10 @@ async function drawInsight() {
   const y = (v) => H - m.b - ((Math.min(v, ymax) - ymin) / (ymax - ymin)) * (H - m.t - m.b);
   let s = "";
 
-  // bike-range band
-  s += `<rect x="${x(0)}" y="${m.t}" width="${x(data.bike_range_mi) - x(0)}" height="${H - m.t - m.b}" fill="rgba(11,11,11,0.05)"/>`;
-  s += `<text x="${x(data.bike_range_mi / 2)}" y="${m.t + 10}" class="c-band" text-anchor="middle">bike range</text>`;
+  // e-bike range band (soft context; the real bikeability signal is the
+  // green dots = inside the urban ring)
+  s += `<rect x="${x(0)}" y="${m.t}" width="${x(data.ebike_range_mi) - x(0)}" height="${H - m.t - m.b}" fill="rgba(11,11,11,0.05)"/>`;
+  s += `<text x="${x(data.ebike_range_mi / 2)}" y="${m.t + 10}" class="c-band" text-anchor="middle">≈ e-bike range</text>`;
 
   // grid + axes
   for (const gv of [2000, 2500, 3000]) {
@@ -243,12 +293,13 @@ async function drawInsight() {
     s += `<text x="${x(mi)}" y="${H - m.b + 14}" class="c-tick" text-anchor="middle">${mi}${mi === 20 ? " mi" : ""}</text>`;
   }
 
-  // per-BG dots (housing payment); dots beyond the y-range are dropped
+  // per-BG dots (housing payment); green = inside the bikeable urban ring
   let off = 0;
   for (const b of data.bgs) {
     if (b.mo_pay > ymax) { off++; continue; }
-    s += `<circle cx="${x(b.dist_mi)}" cy="${y(b.mo_pay)}" r="2.4" class="c-dot"
-      data-g="${b.GEOID}" data-p="${b.mo_pay}" data-a="${b.allin_mo}" data-d="${b.dist_mi}"/>`;
+    s += `<circle cx="${x(b.dist_mi)}" cy="${y(b.mo_pay)}" r="2.4"
+      class="c-dot${b.in_zone ? " c-dot-zone" : ""}"
+      data-g="${b.GEOID}" data-p="${b.mo_pay}" data-a="${b.allin_mo}" data-d="${b.dist_mi}" data-z="${b.in_zone ? 1 : 0}"/>`;
   }
   if (off) {
     s += `<text x="${W - m.r}" y="${m.t + 8}" class="c-tick" text-anchor="end">▲ ${off} pricier areas off scale</text>`;
@@ -273,7 +324,8 @@ async function drawInsight() {
     if (!t.classList.contains("c-dot")) { tooltip.hidden = true; return; }
     tooltip.innerHTML =
       `<div class="tt-factor">${usd(t.dataset.p)}/mo · ${usd(t.dataset.a)} all-in</div>` +
-      `<div class="tt-sub">${t.dataset.d} mi from downtown/UVA</div>`;
+      `<div class="tt-sub">${t.dataset.d} mi from downtown/UVA` +
+      `${t.dataset.z === "1" ? " · bikeable urban ring" : ""}</div>`;
     tooltip.hidden = false;
     tooltip.style.left = e.clientX + 14 + "px";
     tooltip.style.top = e.clientY + 14 + "px";

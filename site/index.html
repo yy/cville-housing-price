@@ -24,6 +24,8 @@
     <button data-mode="rent">Rent: $/mo</button>
     <button data-mode="rentfactor">Rent: factor</button>
   </div>
+  <label id="fine-wrap"><input type="checkbox" id="fine" />
+    fine-grained surface (500&thinsp;m smoothing, no boundaries)</label>
   <div class="legend" id="legend"></div>
   <p class="meta" id="meta"></p>
 </header>
@@ -33,6 +35,8 @@
   <p class="explain">
     Monthly cost of the typical home vs. distance from downtown/UVA —
     with and without the cost of one car commute.
+    <span class="zone-key">●</span> = inside the bikeable urban ring
+    (city + connected development areas, dashed on the map).
   </p>
   <svg id="chart" role="img" aria-label="Housing and all-in monthly cost by distance"></svg>
 </aside>

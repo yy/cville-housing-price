@@ -142,11 +142,21 @@ def diagnostics(m, df: pd.DataFrame, factors: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+def dump_location_components(m, df: pd.DataFrame, factors: pd.DataFrame) -> None:
+    """Per-sale location value (area effect + residual) for the smoothed
+    fine-grained surface."""
+    fe = dict(zip(factors["area"], factors["fe"]))
+    out = df[["lon", "lat", "sale_date"]].copy()
+    out["loc"] = df["area"].map(fe).astype(float) + m.resid()
+    out.to_parquet(PROCESSED / "sale_loc.parquet", index=False)
+
+
 def main() -> None:
     df = prepare()
     m = fit(df)
     factors = extract_factors(m, df)
     factors.to_parquet(PROCESSED / "factors.parquet", index=False)
+    dump_location_components(m, df, factors)
     report = diagnostics(m, df, factors)
     (PROCESSED / "diagnostics.md").write_text(report)
     stats = {

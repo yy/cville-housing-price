@@ -80,8 +80,17 @@ body {
 #chart { width: 100%; height: auto; display: block; }
 .c-grid { stroke: #e1e0d9; stroke-width: 1; }
 .c-tick, .c-band { font-size: 9px; fill: #898781; }
-.c-dot { fill: #898781; opacity: 0.45; }
+.c-dot { fill: #898781; opacity: 0.4; }
+.c-dot-zone { fill: #0e7a54; opacity: 0.75; }
 .c-dot:hover { opacity: 1; }
+.zone-key { color: #0e7a54; }
+#fine-wrap {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+  cursor: pointer;
+}
 .c-line { fill: none; stroke-width: 2; stroke-linejoin: round; }
 .c-housing { stroke: #2a78d6; }
 .c-allin { stroke: #eb6834; }

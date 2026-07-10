@@ -8,6 +8,7 @@ build:
 	uv run python -m pipeline.join_geo
 	uv run python -m pipeline.model
 	uv run python -m pipeline.rent
+	uv run python -m pipeline.surface
 	uv run python -m pipeline.export
 
 model:
