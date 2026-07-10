@@ -1,0 +1,33 @@
+{
+ "n_sales": 19790,
+ "r2": 0.9021,
+ "n_areas": 114,
+ "window": [
+  "2018-01-03",
+  "2026-07-08"
+ ],
+ "built": "2026-07-10",
+ "ref_price": 524000,
+ "base_monthly": 2650,
+ "mortgage": {
+  "rate": 0.065,
+  "down": 0.2,
+  "term_years": 30
+ },
+ "commute": {
+  "cost_per_mile": 0.7,
+  "days_per_month": 22,
+  "bike_range_mi": 3.0,
+  "ebike_range_mi": 6.0
+ },
+ "localities": {
+  "albemarle": {
+   "n_sales": 15687,
+   "median_price": 445000
+  },
+  "cville": {
+   "n_sales": 4748,
+   "median_price": 389384
+  }
+ }
+}

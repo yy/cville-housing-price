@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Methodology — Charlottesville–Albemarle Housing Price Factor</title>
+<link href="style.css" rel="stylesheet" />
+<style>
+  body { position: static; background: #f9f9f7; }
+  main {
+    max-width: 720px; margin: 0 auto; padding: 32px 20px 64px;
+    font-size: 15px; line-height: 1.6; color: var(--text-primary);
+  }
+  main h1 { font-size: 24px; margin: 0 0 4px; }
+  main h2 { font-size: 18px; margin: 28px 0 8px; }
+  main p, main li { color: #333; }
+  main code { background: #eeede8; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  .back { font-size: 13px; }
+  table.src { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  table.src td, table.src th { border-top: 1px solid #e1e0d9; padding: 6px 8px; text-align: left; vertical-align: top; }
+</style>
+</head>
+<body>
+<main>
+<p class="back"><a href="./">← back to the map</a></p>
+<h1>Methodology</h1>
+<p>
+This site estimates how much of a home's price is due to <em>where it is</em>,
+separately from what the house itself is like. All code and data pipelines are
+open; every number can be regenerated from public records.
+</p>
+
+<h2>The price factor</h2>
+<p>
+We pool arm's-length residential sales (2018–present) from Charlottesville City
+and Albemarle County and fit one hedonic regression:
+</p>
+<p>
+<code>log(price) ~ log(sqft) + beds + baths + age + age² + log(lot acres) +
+stories + property type + assessor grade + year-quarter + area</code>
+</p>
+<p>
+The <em>area</em> term is a census-block-group fixed effect (block groups with
+fewer than 20 sales are pooled up to their tract, and thin tracts to the
+locality — these are flagged "pooled" in the panel). The <strong>price
+factor</strong> shown on the map is the exponentiated area effect, normalized so
+the sales-weighted average is 1.00. A factor of 1.25 means the same house costs
+about 25% more there than the metro-wide expectation. The model explains about
+90% of the variance in log sale prices.
+</p>
+<p>
+Sample filters: residential use codes (single-family detached/attached,
+condos), positive prices, county sales marked "Valid Improved" by the assessor,
+city sales screened by price-to-assessment ratio (0.35–3.0), multi-parcel deeds
+dropped, and basic sanity bounds on size and price per square foot.
+</p>
+
+<h2>Dollars per month</h2>
+<p>
+The reference home price (≈ metro-typical home at factor 1.00) is computed by
+deflating each of the last 12 months' sales by its area factor and taking the
+median. Monthly costs are principal + interest on a 30-year fixed mortgage at
+6.5% with 20% down. Change any of these assumptions and the <em>levels</em>
+shift, but the <em>differences between areas</em> — the point of the map —
+barely move.
+</p>
+
+<h2>All-in cost and the bikeability question</h2>
+<p>
+The "Buy: + driving" view adds an estimated commuting cost to the mortgage:
+straight-line distance from each block group's homes to the nearer of downtown
+or UVA, driven twice a workday (22 days/month) at $0.70 per mile — an IRS-style
+all-in cost of car ownership per mile. This is deliberately conservative: one
+commuter, no other car trips priced in.
+</p>
+<p>
+The chart marks city-proper block groups green as a proxy for "bikeable."
+County development areas just outside the city partially connect by greenways,
+but we treat them as car-dependent; e-bikes stretch the plausible range
+(shaded ~6 mi band).
+</p>
+
+<h2>Rent</h2>
+<p>
+There is no parcel-level public rent data, so rent comes in three layers:
+</p>
+<ul>
+<li><strong>Rent: $/mo</strong> — ACS 2019–2023 median gross rent (rent +
+utilities) per block group. Gray where the ACS suppresses the estimate or
+fewer than 30 renter households live.</li>
+<li><strong>Rent: factor</strong> — observed ACS rent divided by the rent
+expected from that block group's renter housing stock. The expectation comes
+from a rent hedonic (bedrooms, single-family share, structure age) fit on ACS
+PUMS microdata for the two local PUMAs. Caveat: that hedonic explains little
+of rent variation (R² ≈ 0.08 on ~590 renter households), so this factor mostly
+reflects raw rent differences — rent varies far less with unit characteristics
+than sale prices do.</li>
+<li><strong>Rent: ZORI (ZIP)</strong> — Zillow's Observed Rent Index, a
+market-rate asking-rent index by ZIP code, with year-over-year change. Coarser
+geography, but current (monthly) where ACS lags several years.</li>
+</ul>
+
+<h2>Fine-grained surface</h2>
+<p>
+Block groups are the finest unit with enough sales for stable per-area
+estimates. The optional fine-grained view instead smooths each individual
+sale's location value (area effect + model residual) onto a 500&thinsp;m grid
+with an 800&thinsp;m Gaussian kernel. Cells whose effective sample is under 8
+sales are left blank rather than extrapolated — which is why rural areas show
+data only where subdivisions exist.
+</p>
+
+<h2>Data sources</h2>
+<table class="src">
+<tr><th>Source</th><th>What</th><th>Cadence</th></tr>
+<tr><td><a href="https://opendata.charlottesville.org/">Charlottesville Open Data</a></td>
+<td>sales, residential details, assessments, parcels</td><td>daily/weekly</td></tr>
+<tr><td><a href="https://www.albemarle.org/government/information-technology/geographic-information-system-gis-mapping/gis-data">Albemarle County GIS</a></td>
+<td>transfer history, CAMA card data, parcels</td><td>weekly</td></tr>
+<tr><td>US Census</td><td>TIGER boundaries, ACS 2019–23 tables, PUMS microdata</td><td>annual</td></tr>
+<tr><td><a href="https://www.zillow.com/research/data/">Zillow Research</a></td>
+<td>ZORI ZIP rent index</td><td>monthly</td></tr>
+</table>
+
+<h2>Limitations</h2>
+<ul>
+<li>Sale prices reflect what transacted; areas with few sales (much of the
+rural county) have wide confidence intervals — click any area to see them.</li>
+<li>The model controls for what assessors record. Unrecorded quality
+(renovation level, views, street noise) lands in the area factor when it
+clusters spatially.</li>
+<li>Straight-line distance understates real driving distance; commute cost is
+one commuter only. Both biases make the periphery look <em>cheaper</em> all-in
+than it really is.</li>
+<li>ACS block-group rents are 5-year averages (2019–2023) and lag the market.</li>
+</ul>
+
+<p class="back" style="margin-top:32px">
+Built from public records. Code:
+<a href="https://github.com/yy/cville-housing-price">github.com/yy/cville-housing-price</a>
+</p>
+</main>
+</body>
+</html>

@@ -42,11 +42,20 @@ const map = new maplibregl.Map({
 });
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }));
 
+const ZORI_SEQ = [
+  [1800, "#d6f0e5"],
+  [2000, "#9adfc4"],
+  [2200, "#4cc39a"],
+  [2400, "#149268"],
+  [2600, "#07523a"],
+];
+
 const RAMPS = {
   factor: ["factor", DIVERGING],
   allin: ["allin_mo", SEQUENTIAL],
   rent: ["acs_rent", RENT_SEQ],
   rentfactor: ["rent_factor", DIVERGING],
+  zori: ["zori", ZORI_SEQ],
 };
 
 const fillColor = () => {
@@ -70,6 +79,7 @@ map.once("style.load", async () => {
   map.addSource("factors", { type: "geojson", data: "data/factors.geojson" });
   map.addSource("localities", { type: "geojson", data: "data/localities.geojson" });
   map.addSource("surface", { type: "geojson", data: "data/surface.geojson" });
+  map.addSource("zori", { type: "geojson", data: "data/zori.geojson" });
 
   map.addLayer({
     id: "factor-fill",
@@ -107,6 +117,28 @@ map.once("style.load", async () => {
     filter: ["==", ["get", "GEOID"], ""],
   });
   map.addLayer({
+    id: "zori-fill",
+    type: "fill",
+    source: "zori",
+    layout: { visibility: "none" },
+    paint: {
+      "fill-color": [
+        "interpolate",
+        ["linear"],
+        ["get", "zori"],
+        ...ZORI_SEQ.flat(),
+      ],
+      "fill-opacity": 0.72,
+    },
+  });
+  map.addLayer({
+    id: "zori-line",
+    type: "line",
+    source: "zori",
+    layout: { visibility: "none" },
+    paint: { "line-color": "rgba(11,11,11,0.35)", "line-width": 0.8 },
+  });
+  map.addLayer({
     id: "locality-line",
     type: "line",
     source: "localities",
@@ -119,10 +151,15 @@ map.once("style.load", async () => {
 });
 
 function syncSurface() {
-  const fine = document.getElementById("fine").checked && MODE === "factor";
-  map.setLayoutProperty("surface-fill", "visibility", fine ? "visible" : "none");
-  map.setLayoutProperty("factor-fill", "visibility", fine ? "none" : "visible");
-  map.setLayoutProperty("factor-line", "visibility", fine ? "none" : "visible");
+  const zori = MODE === "zori";
+  const fine =
+    document.getElementById("fine").checked && MODE === "factor";
+  const vis = (on) => (on ? "visible" : "none");
+  map.setLayoutProperty("surface-fill", "visibility", vis(fine && !zori));
+  map.setLayoutProperty("factor-fill", "visibility", vis(!fine && !zori));
+  map.setLayoutProperty("factor-line", "visibility", vis(!fine && !zori));
+  map.setLayoutProperty("zori-fill", "visibility", vis(zori));
+  map.setLayoutProperty("zori-line", "visibility", vis(zori));
 }
 
 /* ---------------------------------------------------------------- legend */
@@ -156,13 +193,21 @@ function buildLegend() {
       `<span>${usd(2500)}/mo</span></div>` +
       `<div class="assumption">ACS 2019–23 median gross rent (incl. utilities) · ` +
       `gray = too few renters to estimate</div>`;
-  } else {
+  } else if (MODE === "rentfactor") {
     const stops = DIVERGING.map((d) => d[1]).join(",");
     el.innerHTML =
       `<div class="bar" style="background:linear-gradient(to right,${stops})"></div>` +
       `<div class="ticks"><span>0.65×</span><span>1.0 = expected</span><span>1.55×</span></div>` +
       `<div class="assumption">Observed rent ÷ rent expected from the housing stock ` +
       `(bedrooms, type, age; ACS + PUMS)</div>`;
+  } else {
+    const stops = ZORI_SEQ.map((d) => d[1]).join(",");
+    el.innerHTML =
+      `<div class="bar" style="background:linear-gradient(to right,${stops})"></div>` +
+      `<div class="ticks"><span>${usd(1800)}/mo</span><span></span>` +
+      `<span>${usd(2600)}/mo</span></div>` +
+      `<div class="assumption">Zillow Observed Rent Index by ZIP · market asking rents, ` +
+      `updated monthly</div>`;
   }
 }
 
@@ -173,7 +218,9 @@ function wireModeSwitch() {
       document
         .querySelectorAll("#mode button")
         .forEach((x) => x.classList.toggle("active", x === b));
-      map.setPaintProperty("factor-fill", "fill-color", fillColor());
+      if (MODE !== "zori") {
+        map.setPaintProperty("factor-fill", "fill-color", fillColor());
+      }
       document.getElementById("fine-wrap").style.display =
         MODE === "factor" ? "" : "none";
       syncSurface();
@@ -208,6 +255,16 @@ function wireInteraction() {
     tooltip.style.left = e.originalEvent.clientX + 14 + "px";
     tooltip.style.top = e.originalEvent.clientY + 14 + "px";
   });
+  map.on("mousemove", "zori-fill", (e) => {
+    const p = e.features[0].properties;
+    tooltip.innerHTML =
+      `<div class="tt-factor">${usd(p.zori)}/mo · ZIP ${p.zip}</div>` +
+      `<div class="tt-sub">${p.zori_yoy != null ? p.zori_yoy + "% y/y" : "y/y n/a"}</div>`;
+    tooltip.hidden = false;
+    tooltip.style.left = e.originalEvent.clientX + 14 + "px";
+    tooltip.style.top = e.originalEvent.clientY + 14 + "px";
+  });
+  map.on("mouseleave", "zori-fill", () => (tooltip.hidden = true));
   map.on("mousemove", "surface-fill", (e) => {
     const f = e.features[0].properties.factor_fine;
     tooltip.innerHTML =

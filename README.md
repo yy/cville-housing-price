@@ -2,6 +2,9 @@
 
 Quality-adjusted housing price index for Charlottesville City and Albemarle County, VA.
 
+**Live map:** https://yy.github.io/cville-housing-price/ ·
+[methodology](https://yy.github.io/cville-housing-price/methodology.html)
+
 A hedonic model predicts each sale price from visible attributes (size, age, rooms,
 lot, condition); the census-block-group fixed effect is the **price factor** — how much
 more or less the same house costs in that area relative to the metro-wide expectation.

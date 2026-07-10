@@ -73,6 +73,7 @@ body {
   color: #fff;
   border-color: #0b0b0b;
 }
+#mode button.wide { grid-column: 1 / -1; }
 
 #insight { bottom: 12px; left: 12px; width: 320px; }
 #insight h2 { margin: 0 0 4px; font-size: 14px; }
