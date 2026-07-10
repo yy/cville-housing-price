@@ -351,12 +351,13 @@ async function drawInsight() {
   }
 
   // binned lines
+  const solid = data.bins;
   const line = (key) =>
-    data.bins.map((b, i) => `${i ? "L" : "M"}${x(b.mi)},${y(b[key])}`).join("");
+    solid.map((b, i) => `${i ? "L" : "M"}${x(b.mi)},${y(b[key])}`).join("");
   s += `<path d="${line("allin")}" class="c-line c-allin"/>`;
   s += `<path d="${line("housing")}" class="c-line c-housing"/>`;
 
-  const last = data.bins[data.bins.length - 1];
+  const last = solid[solid.length - 1];
   s += `<text x="${x(last.mi) - 2}" y="${y(last.housing) + 12}" class="c-lab c-lab-housing" text-anchor="end">housing</text>`;
   s += `<text x="${x(last.mi) - 2}" y="${y(last.allin) - 6}" class="c-lab c-lab-allin" text-anchor="end">+ driving</text>`;
 

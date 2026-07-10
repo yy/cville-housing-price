@@ -169,15 +169,19 @@ def main() -> None:
         SITE_DATA / "localities.geojson", driver="GeoJSON"
     )
 
-    # cost-of-distance chart data: per-BG dots + sales-weighted binned medians
+    # cost-of-distance chart data: per-BG dots + sales-weighted binned means
+    # (2-mile bins near town, wider bins where rural data thins out)
     df = pd.DataFrame(rows).dropna(subset=["factor"])
-    df["bin"] = (df["dist_mi"] // 2 * 2).astype(int)
+    edges = [0, 2, 4, 6, 8, 10, 12, 16, 22]
+    df["bin"] = pd.cut(df["dist_mi"], edges, right=False)
     bins = []
-    for b, grp in df.groupby("bin"):
+    for b, grp in df.groupby("bin", observed=True):
         w = grp["n_sales"]
+        if w.sum() < 30:
+            continue
         bins.append(
             {
-                "mi": int(b) + 1,
+                "mi": round((b.left + b.right) / 2, 1),
                 "housing": int((grp["mo_pay"] * w).sum() / w.sum()),
                 "allin": int((grp["allin_mo"] * w).sum() / w.sum()),
                 "n": int(w.sum()),

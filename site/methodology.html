@@ -32,7 +32,7 @@ open; every number can be regenerated from public records.
 
 <h2>The price factor</h2>
 <p>
-We pool arm's-length residential sales (2018–present) from Charlottesville City
+We pool arm's-length residential sales (2023–present) from Charlottesville City
 and Albemarle County and fit one hedonic regression:
 </p>
 <p>
@@ -44,7 +44,11 @@ The <em>area</em> term is a census-block-group fixed effect (block groups with
 fewer than 20 sales are pooled up to their tract, and thin tracts to the
 locality — these are flagged "pooled" in the panel). The <strong>price
 factor</strong> shown on the map is the exponentiated area effect, normalized so
-the sales-weighted average is 1.00. A factor of 1.25 means the same house costs
+the sales-weighted average is 1.00. The window starts in 2023 deliberately:
+pre- and post-pandemic factor maps differ substantially (the city traded at a
+~22% discount to comparable county homes in 2018–19 and at parity by 2023+,
+with the largest gains in the city's historically cheapest neighborhoods), so
+mixing eras would show neither. A factor of 1.25 means the same house costs
 about 25% more there than the metro-wide expectation. The model explains about
 90% of the variance in log sale prices.
 </p>

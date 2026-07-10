@@ -56,8 +56,10 @@ PUMS_URL = (
 ACS_YEAR = 2023
 ACS_BASE = f"https://api.census.gov/data/{ACS_YEAR}/acs/acs5"
 
-# Modeling window
-SALES_START = "2018-01-01"
+# Modeling window. Pre- and post-pandemic factor maps differ materially
+# (r≈0.65; the city's ~22% discount vs the county closed to parity), so the
+# headline model uses post-shock sales only.
+SALES_START = "2023-01-01"
 MIN_SALES_PER_BG = 20
 
 # Mortgage assumptions for the $/month translation
