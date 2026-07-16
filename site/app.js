@@ -30,8 +30,19 @@ const fmt = new Intl.NumberFormat("en-US");
 const usd = (v) => "$" + fmt.format(Math.round(v));
 const delta = (v) => (v >= 0 ? "+" : "−") + usd(Math.abs(v));
 
-let MODE = "factor"; // "factor" | "allin"
+let MODE = "factor"; // "factor" | "allin" | "rent" | "rentfactor" | "zori"
 let META = null;
+let ERAS = null; // site/data/eras.json (per-era factors for the time slider)
+let ERA_IDX = 0; // index into ERAS.eras; last = headline window
+let INSIGHT = null; // site/data/insight.json (cost-of-distance chart data)
+
+const latestEra = () => !ERAS || ERA_IDX === ERAS.eras.length - 1;
+const eraLabel = () => (ERAS ? ERAS.eras[ERA_IDX].label : "");
+const eraRec = (geoid) => {
+  if (!ERAS) return null;
+  const recs = ERAS.areas[geoid];
+  return recs ? recs[ERAS.eras[ERA_IDX].key] : null;
+};
 
 const map = new maplibregl.Map({
   container: "map",
@@ -60,6 +71,21 @@ const RAMPS = {
 
 const fillColor = () => {
   const [prop, ramp] = RAMPS[MODE];
+  if (MODE === "factor" && !latestEra()) {
+    // older era: factors come from eras.json via feature-state (ef = -1
+    // marks "no data in this era")
+    return [
+      "case",
+      ["<", ["coalesce", ["feature-state", "ef"], -1], 0],
+      "rgba(0,0,0,0.04)",
+      [
+        "interpolate",
+        ["linear"],
+        ["coalesce", ["feature-state", "ef"], 1],
+        ...ramp.flat(),
+      ],
+    ];
+  }
   return [
     "case",
     ["==", ["get", prop], null],
@@ -74,12 +100,20 @@ map.once("style.load", async () => {
     r.json()
   );
   window.__v = "?v=" + encodeURIComponent(META.built);
+  ERAS = await fetch("data/eras.json" + window.__v)
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+  if (ERAS) ERA_IDX = ERAS.eras.length - 1;
   document.getElementById("meta").textContent =
     `${fmt.format(META.n_sales)} sales ${META.window[0].slice(0, 4)}–` +
     `${META.window[1].slice(0, 4)} · hedonic model R² ${META.r2.toFixed(2)}` +
     ` · built ${META.built}`;
 
-  map.addSource("factors", { type: "geojson", data: "data/factors.geojson" + window.__v });
+  map.addSource("factors", {
+    type: "geojson",
+    data: "data/factors.geojson" + window.__v,
+    promoteId: "GEOID",
+  });
   map.addSource("localities", { type: "geojson", data: "data/localities.geojson" + window.__v });
   map.addSource("surface", { type: "geojson", data: "data/surface.geojson" + window.__v });
   map.addSource("zori", { type: "geojson", data: "data/zori.geojson" + window.__v });
@@ -90,6 +124,7 @@ map.once("style.load", async () => {
     source: "factors",
     paint: { "fill-color": fillColor(), "fill-opacity": 0.78 },
   });
+  map.setPaintProperty("factor-fill", "fill-color-transition", { duration: 500 });
   map.addLayer({
     id: "surface-fill",
     type: "fill",
@@ -150,13 +185,15 @@ map.once("style.load", async () => {
   buildLegend();
   wireModeSwitch();
   wireInteraction();
-  drawInsight();
+  buildEraUI();
+  await drawInsight();
+  initStory();
 });
 
 function syncSurface() {
   const zori = MODE === "zori";
   const fine =
-    document.getElementById("fine").checked && MODE === "factor";
+    document.getElementById("fine").checked && MODE === "factor" && latestEra();
   const vis = (on) => (on ? "visible" : "none");
   map.setLayoutProperty("surface-fill", "visibility", vis(fine && !zori));
   map.setLayoutProperty("factor-fill", "visibility", vis(!fine && !zori));
@@ -165,17 +202,83 @@ function syncSurface() {
   map.setLayoutProperty("zori-line", "visibility", vis(zori));
 }
 
+/* ------------------------------------------------------------- time slider */
+
+function buildEraUI() {
+  const wrap = document.getElementById("era-wrap");
+  if (!ERAS || ERAS.eras.length < 2) {
+    wrap.hidden = true;
+    ERAS = null;
+    return;
+  }
+  const n = ERAS.eras.length;
+  const slider = document.getElementById("era");
+  slider.max = n - 1;
+  slider.value = ERA_IDX;
+  slider.setAttribute("aria-label", "sales window");
+  const ticks = document.getElementById("era-ticks");
+  ticks.innerHTML = ERAS.eras
+    .map(
+      (e, i) =>
+        `<span data-i="${i}" class="${i === ERA_IDX ? "active" : ""}">${e.label}</span>`
+    )
+    .join("");
+  ticks
+    .querySelectorAll("span")
+    .forEach((s) => (s.onclick = () => applyEra(+s.dataset.i)));
+  slider.oninput = () => applyEra(+slider.value);
+  wrap.hidden = MODE !== "factor";
+}
+
+function applyEra(i) {
+  if (!ERAS) return;
+  ERA_IDX = Math.max(0, Math.min(i, ERAS.eras.length - 1));
+  const slider = document.getElementById("era");
+  slider.value = ERA_IDX;
+  document
+    .querySelectorAll("#era-ticks span")
+    .forEach((s, j) => s.classList.toggle("active", j === ERA_IDX));
+  if (!latestEra()) {
+    const key = ERAS.eras[ERA_IDX].key;
+    for (const g in ERAS.areas) {
+      const rec = ERAS.areas[g][key];
+      map.setFeatureState(
+        { source: "factors", id: g },
+        { ef: rec ? rec.factor : -1 }
+      );
+    }
+    document.getElementById("fine").checked = false; // surface is headline-only
+  }
+  document.getElementById("fine-wrap").style.display =
+    MODE === "factor" && latestEra() ? "" : "none";
+  syncSurface();
+  if (MODE !== "zori") {
+    map.setPaintProperty("factor-fill", "fill-color", fillColor());
+  }
+  buildLegend();
+  document.getElementById("detail").hidden = true;
+}
+
 /* ---------------------------------------------------------------- legend */
 
 function buildLegend() {
   const el = document.getElementById("legend");
   if (MODE === "factor") {
     const stops = DIVERGING.map((d) => d[1]).join(",");
+    if (!latestEra()) {
+      el.innerHTML =
+        `<div class="bar" style="background:linear-gradient(to right,${stops})"></div>` +
+        `<div class="ticks"><span>0.65×</span>` +
+        `<span>1.00 = typical</span><span>1.55×</span></div>` +
+        `<div class="assumption">Factors from ${eraLabel()} sales · ` +
+        `each era normalized to its own typical location</div>`;
+      return;
+    }
     const dm = (f) => delta(META.base_monthly * (f - 1)) + "/mo";
     el.innerHTML =
       `<div class="bar" style="background:linear-gradient(to right,${stops})"></div>` +
       `<div class="ticks"><span>${dm(0.65)}</span>` +
-      `<span>avg ${usd(META.base_monthly)}/mo</span><span>${dm(1.55)}</span></div>` +
+      `<span>typical ${usd(META.base_monthly)}/mo</span><span>${dm(1.55)}</span></div>` +
       `<div class="assumption">Typical home ≈ ${usd(META.ref_price)} · ` +
       `${(META.mortgage.rate * 100).toFixed(1)}% 30-yr fixed, ` +
       `${META.mortgage.down * 100}% down</div>`;
@@ -214,21 +317,24 @@ function buildLegend() {
   }
 }
 
+function setMode(mode) {
+  MODE = mode;
+  document
+    .querySelectorAll("#mode button")
+    .forEach((x) => x.classList.toggle("active", x.dataset.mode === mode));
+  if (MODE !== "zori") {
+    map.setPaintProperty("factor-fill", "fill-color", fillColor());
+  }
+  document.getElementById("fine-wrap").style.display =
+    MODE === "factor" && latestEra() ? "" : "none";
+  document.getElementById("era-wrap").hidden = !(MODE === "factor" && ERAS);
+  syncSurface();
+  buildLegend();
+}
+
 function wireModeSwitch() {
   document.querySelectorAll("#mode button").forEach((b) => {
-    b.onclick = () => {
-      MODE = b.dataset.mode;
-      document
-        .querySelectorAll("#mode button")
-        .forEach((x) => x.classList.toggle("active", x === b));
-      if (MODE !== "zori") {
-        map.setPaintProperty("factor-fill", "fill-color", fillColor());
-      }
-      document.getElementById("fine-wrap").style.display =
-        MODE === "factor" ? "" : "none";
-      syncSurface();
-      buildLegend();
-    };
+    b.onclick = () => setMode(b.dataset.mode);
   });
   document.getElementById("fine").onchange = syncSurface;
 }
@@ -243,17 +349,28 @@ function wireInteraction() {
     const p = e.features[0].properties;
     map.getCanvas().style.cursor = "pointer";
     map.setFilter("factor-hover", ["==", ["get", "GEOID"], p.GEOID]);
-    const prop = RAMPS[MODE][0];
-    if (p[prop] == null) { tooltip.hidden = true; return; }
-    const head = {
-      factor: () => `${(+p.factor).toFixed(2)}× · ${delta(p.mo_delta)}/mo`,
-      allin: () => `${usd(p.allin_mo)}/mo all-in`,
-      rent: () => `${usd(p.acs_rent)}/mo median rent`,
-      rentfactor: () => `${(+p.rent_factor).toFixed(2)}× rent factor`,
-    }[MODE]();
+    let head, sub;
+    if (MODE === "factor" && !latestEra()) {
+      const rec = eraRec(p.GEOID);
+      if (!rec) { tooltip.hidden = true; return; }
+      head = `${rec.factor.toFixed(2)}× in ${eraLabel()}`;
+      sub =
+        `95% CI ${rec.lo.toFixed(2)}–${rec.hi.toFixed(2)}` +
+        (rec.pooled ? " · pooled" : "");
+    } else {
+      const prop = RAMPS[MODE][0];
+      if (p[prop] == null) { tooltip.hidden = true; return; }
+      head = {
+        factor: () => `${(+p.factor).toFixed(2)}× · ${delta(p.mo_delta)}/mo`,
+        allin: () => `${usd(p.allin_mo)}/mo all-in`,
+        rent: () => `${usd(p.acs_rent)}/mo median rent`,
+        rentfactor: () => `${(+p.rent_factor).toFixed(2)}× rent factor`,
+      }[MODE]();
+      sub = `${usd(p.median_ppsf)}/sqft · ${p.dist_mi} mi out · ${p.n_sales} sales`;
+    }
     tooltip.innerHTML =
       `<div class="tt-factor">${head}</div>` +
-      `<div class="tt-sub">${usd(p.median_ppsf)}/sqft · ${p.dist_mi} mi out · ${p.n_sales} sales</div>`;
+      `<div class="tt-sub">${sub}</div>`;
     tooltip.hidden = false;
     tooltip.style.left = e.originalEvent.clientX + 14 + "px";
     tooltip.style.top = e.originalEvent.clientY + 14 + "px";
@@ -287,20 +404,32 @@ function wireInteraction() {
 
   map.on("click", "factor-fill", (e) => {
     const p = e.features[0].properties;
-    if (p.factor == null) return;
+    const eraMode = MODE === "factor" && !latestEra();
+    const rec = eraMode ? eraRec(p.GEOID) : null;
+    if (eraMode ? !rec : p.factor == null) return;
     document.getElementById("d-title").textContent =
       `${p.locality === "cville" ? "Charlottesville" : "Albemarle"} · block group ${p.GEOID.slice(5)}`;
-    document.getElementById("d-factor").textContent = (+p.factor).toFixed(2) + "×";
+    const f = eraMode ? rec.factor : +p.factor;
+    const lo = eraMode ? rec.lo : +p.factor_lo;
+    const hi = eraMode ? rec.hi : +p.factor_hi;
+    document.getElementById("d-factor").textContent = f.toFixed(2) + "×";
     document.getElementById("d-ci").textContent =
-      `95% CI ${(+p.factor_lo).toFixed(2)}–${(+p.factor_hi).toFixed(2)}`;
+      `95% CI ${lo.toFixed(2)}–${hi.toFixed(2)}`;
+    const eraNote = document.getElementById("d-era");
+    eraNote.hidden = !eraMode;
+    if (eraMode) {
+      eraNote.textContent =
+        `Factor from ${eraLabel()} sales. Dollar rows below reflect the ` +
+        `current (${ERAS.eras[ERAS.eras.length - 1].label}) window.`;
+    }
     document.getElementById("d-table").innerHTML = [
       ["Typical home here", usd(p.est_price)],
       ["Monthly payment", usd(p.mo_pay) + "/mo"],
-      ["vs. metro average", delta(p.mo_delta) + "/mo"],
+      ["vs. typical location", delta(p.mo_delta) + "/mo"],
       ["Distance to jobs", p.dist_mi + " mi"],
       ["Est. driving cost", usd(p.drive_mo) + "/mo"],
-      ["All-in (1 car)", usd(p.allin_mo) + "/mo"],
-      ["All-in (2 cars)", usd(p.allin2_mo) + "/mo"],
+      ["All-in (1 commuter drives)", usd(p.allin_mo) + "/mo"],
+      ["All-in (2 commuters drive)", usd(p.allin2_mo) + "/mo"],
       ["Median sale price", usd(p.median_price)],
       ["Median $/sqft", usd(p.median_ppsf)],
       ["Sales in window", fmt.format(p.n_sales)],
@@ -311,7 +440,9 @@ function wireInteraction() {
     ]
       .map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`)
       .join("");
-    document.getElementById("d-pooled").hidden = !(p.pooled === true || p.pooled === "true");
+    document.getElementById("d-pooled").hidden = !(
+      eraMode ? rec.pooled === 1 : Number(p.pooled) === 1
+    );
     detail.hidden = false;
   });
   document.getElementById("close").onclick = () => (detail.hidden = true);
@@ -319,19 +450,26 @@ function wireInteraction() {
 
 /* -------------------------------------------------- cost-of-distance chart */
 
-async function drawInsight() {
-  const data = await fetch("data/insight.json" + window.__v).then((r) => r.json());
-  const svg = document.getElementById("chart");
+function renderChart(svg, data, opts = {}) {
+  const show = opts.show || ["housing", "allin", "allin2"];
+  const bands = opts.bands || "ebike"; // "ebike" | "both" | "none"
   const W = 300, H = 190, m = { l: 44, r: 16, t: 12, b: 26 };
   const xmax = 20, ymin = 1600, ymax = 3400;
   const x = (mi) => m.l + (Math.min(mi, xmax) / xmax) * (W - m.l - m.r);
   const y = (v) => H - m.b - ((Math.min(v, ymax) - ymin) / (ymax - ymin)) * (H - m.t - m.b);
   let s = "";
 
-  // e-bike range band (soft context; the real bikeability signal is the
+  // range bands (soft context; the real bikeability signal is the
   // green dots = inside the urban ring)
-  s += `<rect x="${x(0)}" y="${m.t}" width="${x(data.ebike_range_mi) - x(0)}" height="${H - m.t - m.b}" fill="rgba(11,11,11,0.05)"/>`;
-  s += `<text x="${x(data.ebike_range_mi / 2)}" y="${m.t + 10}" class="c-band" text-anchor="middle">≈ e-bike range</text>`;
+  if (bands === "both") {
+    s += `<rect x="${x(0)}" y="${m.t}" width="${x(data.bike_range_mi) - x(0)}" height="${H - m.t - m.b}" fill="rgba(14,122,84,0.14)"/>`;
+    s += `<rect x="${x(data.bike_range_mi)}" y="${m.t}" width="${x(data.ebike_range_mi) - x(data.bike_range_mi)}" height="${H - m.t - m.b}" fill="rgba(14,122,84,0.07)"/>`;
+    s += `<text x="${x(data.bike_range_mi / 2)}" y="${m.t + 10}" class="c-band c-band-zone" text-anchor="middle">bike</text>`;
+    s += `<text x="${x((data.bike_range_mi + data.ebike_range_mi) / 2)}" y="${m.t + 10}" class="c-band c-band-zone" text-anchor="middle">e-bike</text>`;
+  } else if (bands === "ebike") {
+    s += `<rect x="${x(0)}" y="${m.t}" width="${x(data.ebike_range_mi) - x(0)}" height="${H - m.t - m.b}" fill="rgba(11,11,11,0.05)"/>`;
+    s += `<text x="${x(data.ebike_range_mi / 2)}" y="${m.t + 10}" class="c-band" text-anchor="middle">≈ e-bike range</text>`;
+  }
 
   // grid + axes
   for (const gv of [2000, 2500, 3000]) {
@@ -346,7 +484,7 @@ async function drawInsight() {
   let off = 0;
   for (const b of data.bgs) {
     if (b.mo_pay > ymax) { off++; continue; }
-    s += `<circle cx="${x(b.dist_mi)}" cy="${y(b.mo_pay)}" r="2.4"
+    s += `<circle cx="${x(b.dist_mi)}" cy="${y(b.mo_pay)}" r="${opts.zone && b.in_zone ? 3.2 : 2.4}"
       class="c-dot${b.in_zone ? " c-dot-zone" : ""}"
       data-g="${b.GEOID}" data-p="${b.mo_pay}" data-a="${b.allin_mo}" data-d="${b.dist_mi}" data-z="${b.in_zone ? 1 : 0}"/>`;
   }
@@ -365,26 +503,31 @@ async function drawInsight() {
     }
     return d;
   };
-  s += `<path d="${line("allin2")}" class="c-line c-allin2"/>`;
-  s += `<path d="${line("allin")}" class="c-line c-allin"/>`;
-  s += `<path d="${line("housing")}" class="c-line c-housing"/>`;
+  const order = ["allin2", "allin", "housing"];
+  for (const key of order) {
+    if (show.includes(key)) s += `<path d="${line(key)}" class="c-line c-${key}"/>`;
+  }
 
   const at = c.mi.indexOf(16) >= 0 ? c.mi.indexOf(16) : c.mi.length - 4;
   for (const [key, cls, dy, label] of [
     ["housing", "c-lab-housing", 14, "housing"],
-    ["allin", "c-lab-allin", -7, "+ 1 car"],
-    ["allin2", "c-lab-allin2", -7, "+ 2 cars"],
+    ["allin", "c-lab-allin", -7, "+ 1 commuter"],
+    ["allin2", "c-lab-allin2", -7, "+ 2 commuters"],
   ]) {
+    if (!show.includes(key)) continue;
     s += `<text x="${x(c.mi[at])}" y="${y(c[key][at]) + dy}" class="c-lab ${cls}" text-anchor="middle">${label}</text>`;
   }
 
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.classList.toggle("zone-hi", !!opts.zone);
   svg.innerHTML = s;
 
+  if (svg.dataset.tt) return;
+  svg.dataset.tt = "1";
   const tooltip = document.getElementById("tooltip");
   svg.addEventListener("mousemove", (e) => {
     const t = e.target;
-    if (!t.classList.contains("c-dot")) { tooltip.hidden = true; return; }
+    if (!t.classList || !t.classList.contains("c-dot")) { tooltip.hidden = true; return; }
     tooltip.innerHTML =
       `<div class="tt-factor">${usd(t.dataset.p)}/mo · ${usd(t.dataset.a)} all-in</div>` +
       `<div class="tt-sub">${t.dataset.d} mi from downtown/UVA` +
@@ -394,4 +537,100 @@ async function drawInsight() {
     tooltip.style.top = e.clientY + 14 + "px";
   });
   svg.addEventListener("mouseleave", () => (tooltip.hidden = true));
+}
+
+async function drawInsight() {
+  INSIGHT = await fetch("data/insight.json" + window.__v).then((r) => r.json());
+  renderChart(document.getElementById("chart"), INSIGHT);
+}
+
+/* ------------------------------------------------------------- story mode */
+
+let storyTimer = null;
+
+function fillStoryNumbers(data) {
+  const c = data.curves;
+  const idx = [];
+  for (let i = 0; i < c.mi.length; i++) if (c.allin[i] != null) idx.push(i);
+  const first = idx[0], last = idx[idx.length - 1];
+  const mid = [];
+  for (let i = 0; i < c.mi.length; i++) {
+    if (c.mi[i] >= 8 && c.mi[i] <= 13 && c.allin2[i] != null) mid.push(c.allin2[i]);
+  }
+  const vals = {
+    "housing-near": usd(c.housing[first]),
+    "housing-far": usd(c.housing[last]),
+    "far-mi": `${c.mi[last]} miles`,
+    "allin-near": usd(c.allin[first]),
+    "allin-far": usd(c.allin[last]),
+    "allin2-near": usd(c.allin2[first]),
+    "allin2-mid": mid.length
+      ? `${usd(Math.min(...mid))}–${usd(Math.max(...mid))}`
+      : "",
+    "bike-mi": data.bike_range_mi,
+    "ebike-mi": data.ebike_range_mi,
+  };
+  document.querySelectorAll("#story [data-fill]").forEach((el) => {
+    const v = vals[el.dataset.fill];
+    if (v != null && v !== "") el.textContent = v;
+  });
+}
+
+function applyStoryStep(i, el) {
+  clearTimeout(storyTimer);
+  if (i <= 1) setMode("factor");
+  if (i === 0 && ERAS) applyEra(ERAS.eras.length - 1);
+  if (i === 1 && ERAS) {
+    // animate the repricing: pre-pandemic map, then dissolve to current
+    applyEra(0);
+    storyTimer = setTimeout(() => applyEra(ERAS.eras.length - 1), 1800);
+  }
+  if (i >= 2 && INSIGHT) {
+    if (ERAS && !latestEra()) applyEra(ERAS.eras.length - 1);
+    const optsBy = {
+      2: { show: ["housing"], bands: "none" },
+      3: { show: ["housing", "allin"], bands: "none" },
+      4: { show: ["housing", "allin", "allin2"], bands: "none" },
+      5: { show: ["housing", "allin", "allin2"], bands: "both", zone: true },
+    };
+    const svg = el.querySelector("svg");
+    if (svg) renderChart(svg, INSIGHT, optsBy[i] || {});
+  }
+}
+
+function initStory() {
+  const story = document.getElementById("story");
+  const btn = document.getElementById("story-btn");
+  if (!story || !btn) return;
+  if (INSIGHT) fillStoryNumbers(INSIGHT);
+
+  const steps = story.querySelectorAll(".story-step");
+  const obs = new IntersectionObserver(
+    (entries) => {
+      for (const en of entries) {
+        if (en.isIntersecting) applyStoryStep(+en.target.dataset.step, en.target);
+      }
+    },
+    { root: story, threshold: 0.5 }
+  );
+  steps.forEach((s) => obs.observe(s));
+
+  const enter = () => {
+    story.hidden = false;
+    document.body.classList.add("storying");
+    story.scrollTop = 0;
+    applyStoryStep(0, steps[0]);
+  };
+  const exit = () => {
+    clearTimeout(storyTimer);
+    story.hidden = true;
+    document.body.classList.remove("storying");
+    if (ERAS) applyEra(ERAS.eras.length - 1);
+    setMode("factor");
+  };
+  btn.onclick = enter;
+  document.getElementById("story-exit").onclick = exit;
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !story.hidden) exit();
+  });
 }

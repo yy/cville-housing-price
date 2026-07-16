@@ -1,14 +1,14 @@
 {
- "n_sales": 7030,
- "r2": 0.877,
+ "n_sales": 7180,
+ "r2": 0.8782,
  "n_areas": 108,
  "window": [
   "2023-01-03",
-  "2026-07-08"
+  "2026-07-13"
  ],
- "built": "2026-07-10",
- "ref_price": 529000,
- "base_monthly": 2680,
+ "built": "2026-07-15",
+ "ref_price": 537000,
+ "base_monthly": 2720,
  "mortgage": {
   "rate": 0.065,
   "down": 0.2,
@@ -22,11 +22,11 @@
  },
  "localities": {
   "albemarle": {
-   "n_sales": 5643,
+   "n_sales": 5793,
    "median_price": 525000
   },
   "cville": {
-   "n_sales": 1613,
+   "n_sales": 1620,
    "median_price": 460000
   }
  }

@@ -7,7 +7,10 @@ Quality-adjusted housing price index for Charlottesville City and Albemarle Coun
 
 A hedonic model predicts each sale price from visible attributes (size, age, rooms,
 lot, condition); the census-block-group fixed effect is the **price factor** — how much
-more or less the same house costs in that area relative to the metro-wide expectation.
+more or less the same house costs in that area relative to the metro-wide expectation
+(normalized so the sales-weighted *geometric* mean factor is 1.00, i.e. 1.00 = the
+typical location). A time slider compares the current (2023+) factor map with a
+pre-pandemic (2018–19) fit of the same model.
 Rent layers come from ACS, Zillow ZORI, and HUD Small Area FMRs, plus a
 characteristics-adjusted rent factor built from ACS PUMS.
 
@@ -23,7 +26,14 @@ characteristics-adjusted rent factor built from ACS PUMS.
 ## Usage
 
 ```bash
-make fetch    # download raw data into data/raw/
-make build    # clean → join → model → rent → export site/data/
+make fetch    # download any missing raw inputs
+make build    # build only missing or outdated outputs with Snakemake
+make refresh  # refresh city, county, and ZORI data, then rebuild affected outputs
+make validate # validate every generated map-data file
 make serve    # local preview at http://localhost:8321
 ```
+
+The default Snakemake target builds and validates every file under `site/data/`.
+Raw and processed data remain gitignored. The GitHub Pages workflow performs a
+clean build on every push to `main`, on manual dispatch, and weekly, so scheduled
+deployments fetch current inputs rather than relying on committed generated data.

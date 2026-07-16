@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Charlottesville–Albemarle Housing Price Factor</title>
+<title>Charlottesville / Housing price map</title>
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
 <link href="style.css" rel="stylesheet" />
 </head>
@@ -11,12 +11,13 @@
 <div id="map"></div>
 
 <header class="panel" id="titlebar">
-  <h1>Housing price factor</h1>
+  <button id="story-btn" title="scroll through the findings">story</button>
+  <h1>Housing price map</h1>
   <p id="subtitle">Charlottesville City &amp; Albemarle County</p>
   <p class="explain">
     How much more (or less) the <em>same house</em> costs in each area,
     after adjusting for size, age, rooms, lot, type, and quality grade.
-    1.00&nbsp;=&nbsp;metro average.
+    1.00&nbsp;=&nbsp;typical location.
   </p>
   <div id="mode">
     <button data-mode="factor" class="active">Buy: factor</button>
@@ -24,6 +25,10 @@
     <button data-mode="rent">Rent: $/mo</button>
     <button data-mode="rentfactor">Rent: factor</button>
     <button data-mode="zori" class="wide">Rent: ZORI by ZIP (monthly, market-rate)</button>
+  </div>
+  <div id="era-wrap" hidden>
+    <input type="range" id="era" min="0" max="1" step="1" value="1" />
+    <div id="era-ticks"></div>
   </div>
   <label id="fine-wrap"><input type="checkbox" id="fine" />
     fine-grained surface (500&thinsp;m smoothing, no boundaries)</label>
@@ -36,7 +41,7 @@
   <h2>The cost of distance</h2>
   <p class="explain">
     Monthly cost of the typical home vs. distance from downtown/UVA —
-    alone, and with one or two car commutes priced in.
+    alone, and with one or two commuters&rsquo; driving priced in.
     <span class="zone-key">●</span> = city proper (bikeable);
     gray = county (car-dependent for most trips).
   </p>
@@ -47,11 +52,89 @@
   <button id="close" aria-label="close">×</button>
   <h2 id="d-title"></h2>
   <div class="factor-line"><span id="d-factor"></span><span id="d-ci"></span></div>
+  <p class="era-note" id="d-era" hidden></p>
   <table id="d-table"></table>
   <p class="pooled-note" id="d-pooled" hidden>
     Few sales here — estimate pooled with neighboring block groups.
   </p>
 </aside>
+
+<div id="story" hidden>
+  <button id="story-exit" aria-label="exit story">× exit</button>
+  <section class="story-step" data-step="0">
+    <div class="story-card">
+      <h3>What does location cost?</h3>
+      <p>
+        Take the same house — same size, age, rooms, lot, quality — and move it
+        around the map. Its price changes a lot. Each area's color is that
+        location premium: red means the identical house costs more there,
+        blue less. 1.00 is the typical location.
+      </p>
+      <p class="story-hint">Scroll to continue ↓</p>
+    </div>
+  </section>
+  <section class="story-step" data-step="1">
+    <div class="story-card">
+      <h3>The pandemic repricing</h3>
+      <p>
+        In 2018–19 the city traded at roughly an 18% discount to comparable
+        county homes. By 2023 the discount was gone — the map you're watching
+        is dissolving from the pre-pandemic factors to today's, and the
+        biggest gains landed in the city's historically cheapest neighborhoods.
+      </p>
+    </div>
+  </section>
+  <section class="story-step" data-step="2">
+    <div class="story-card">
+      <h3>Housing looks cheaper the farther you go</h3>
+      <p>
+        The classic deal: monthly payment on the typical home falls from about
+        <strong data-fill="housing-near">…</strong> near downtown to
+        <strong data-fill="housing-far">…</strong> at
+        <span data-fill="far-mi">…</span> out.
+      </p>
+      <svg class="story-chart" role="img" aria-label="Housing cost by distance"></svg>
+    </div>
+  </section>
+  <section class="story-step" data-step="3">
+    <div class="story-card">
+      <h3>…until you price the driving</h3>
+      <p>
+        Add one commuter's round trips (22 days a month, $0.70 a mile) and the
+        distance discount shrinks — but survives: about
+        <strong data-fill="allin-far">…</strong> all-in at the far edge vs.
+        <strong data-fill="allin-near">…</strong> near downtown.
+      </p>
+      <svg class="story-chart" role="img" aria-label="Housing plus one commuter driving"></svg>
+    </div>
+  </section>
+  <section class="story-step" data-step="4">
+    <div class="story-card">
+      <h3>Two commuters: the discount inverts</h3>
+      <p>
+        With two commuters driving, the mid-ring (8–13 miles) runs
+        <strong data-fill="allin2-mid">…</strong> a month against
+        <strong data-fill="allin2-near">…</strong> downtown. Moving out to
+        save money stops working once both commutes are priced.
+      </p>
+      <svg class="story-chart" role="img" aria-label="Housing plus two commuters driving"></svg>
+    </div>
+  </section>
+  <section class="story-step" data-step="5">
+    <div class="story-card">
+      <h3>The bikeable zone</h3>
+      <p>
+        Inside about <span data-fill="bike-mi">3</span> miles a bike can
+        replace the car commute entirely — an e-bike stretches that to about
+        <span data-fill="ebike-mi">6</span>. The green dots are city-proper
+        block groups: close-in, and cheaper all-in than the mid-ring once
+        driving is priced.
+      </p>
+      <svg class="story-chart" role="img" aria-label="Bike and e-bike range over the cost curves"></svg>
+      <p class="story-hint"><a href="#" onclick="document.getElementById('story-exit').click();return false">Explore the map yourself →</a></p>
+    </div>
+  </section>
+</div>
 
 <div id="tooltip" hidden></div>
 

@@ -1,21 +1,25 @@
-.PHONY: fetch build model export serve
+.PHONY: fetch refresh build model export validate serve
+
+SNAKEMAKE = uv run snakemake --cores 2
 
 fetch:
-	uv run python -m pipeline.fetch
+	$(SNAKEMAKE) fetch_all
+
+refresh:
+	uv run python -m pipeline.fetch --group cville --group albemarle --group zori --force
+	$(SNAKEMAKE)
 
 build:
-	uv run python -m pipeline.clean
-	uv run python -m pipeline.join_geo
-	uv run python -m pipeline.model
-	uv run python -m pipeline.rent
-	uv run python -m pipeline.surface
-	uv run python -m pipeline.export
+	$(SNAKEMAKE)
 
 model:
-	uv run python -m pipeline.model
+	$(SNAKEMAKE) data/processed/factors.parquet
 
 export:
-	uv run python -m pipeline.export
+	$(SNAKEMAKE) site/data/meta.json
+
+validate:
+	$(SNAKEMAKE) data/processed/site.validated
 
 serve:
-	python3 -m http.server 8321 -d site
+	uv run python -m http.server 8321 -d site

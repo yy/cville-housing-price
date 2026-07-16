@@ -23,7 +23,7 @@ def parcel_points() -> gpd.GeoDataFrame:
     al["locality"] = "albemarle"
     parcels = pd.concat([cv, al], ignore_index=True)
     parcels["gpin"] = norm_gpin(parcels["GPIN"])
-    parcels = parcels.dropna(subset=["geometry"]).drop_duplicates("gpin")
+    parcels = parcels.dropna(subset=["geometry"]).drop_duplicates(["locality", "gpin"])
     parcels["geometry"] = parcels["geometry"].representative_point()
     return gpd.GeoDataFrame(parcels[["locality", "gpin", "geometry"]], crs=4326)
 

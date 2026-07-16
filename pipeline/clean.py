@@ -11,7 +11,7 @@ import zipfile
 
 import pandas as pd
 
-from .config import PROCESSED, RAW, SALES_START
+from .config import CLEAN_START, PROCESSED, RAW
 
 
 def read_alb_txt(zip_name: str, txt_name: str) -> pd.DataFrame:
@@ -37,7 +37,7 @@ def clean_cville() -> pd.DataFrame:
 
     sales["sale_date"] = pd.to_datetime(sales["SaleDate"], unit="ms")
     sales["sale_price"] = num(sales["SaleAmount"])
-    sales = sales[(sales["sale_date"] >= SALES_START) & (sales["sale_price"] > 0)]
+    sales = sales[(sales["sale_date"] >= CLEAN_START) & (sales["sale_price"] > 0)]
 
     # multi-parcel deeds: same book/page covers several parcels -> price is
     # for the bundle, not the home; drop all members
@@ -113,7 +113,7 @@ def clean_albemarle() -> pd.DataFrame:
     sales["sale_price"] = num(sales["saleprice"])
     sales = sales[
         (sales["validitycode"] == "Valid Improved")
-        & (sales["sale_date"] >= SALES_START)
+        & (sales["sale_date"] >= CLEAN_START)
         & (sales["sale_price"] > 0)
     ]
     sales = sales.sort_values("sale_price").drop_duplicates(
@@ -145,11 +145,24 @@ def clean_albemarle() -> pd.DataFrame:
 
     df = sales.merge(rc, left_on="mapblolot", right_on="TMP")
     df = df.merge(
-        pinfo[["ParcelID", "GPIN", "LotSize"]].drop_duplicates("ParcelID"),
+        pinfo[["ParcelID", "GPIN", "LotSize", "TotalValue"]].drop_duplicates(
+            "ParcelID"
+        ),
         left_on="mapblolot",
         right_on="ParcelID",
         how="left",
     )
+
+    # arm's-length screen, symmetric with the city: price vs current total
+    # assessed value, generous band since older sales predate the assessment
+    assessed = num(df["TotalValue"]).where(lambda v: v > 0)
+    ratio = df["sale_price"] / assessed
+    keep = ratio.between(0.35, 3.0) | assessed.isna()
+    print(
+        f"albemarle price/assessment screen drops {int((~keep).sum())} "
+        f"of {len(df)} sales"
+    )
+    df = df[keep]
 
     grade = (
         df["Grade"].str.split(":").str[0].str.strip().fillna("NA")
@@ -179,6 +192,31 @@ def clean_albemarle() -> pd.DataFrame:
 # ---------------------------------------------------------------- main
 
 
+def validate(df: pd.DataFrame) -> pd.DataFrame:
+    """Null out physically implausible attribute values, loudly.
+
+    Entry errors (a year in the stories column, a future year_built) must not
+    silently survive into the model via clipping — warn with counts and null
+    them so a column misalignment upstream is visible here.
+    """
+    max_year = pd.Timestamp.now().year + 1
+    checks = [
+        ("stories", ~df["stories"].between(0.5, 6)),
+        ("year_built", ~df["year_built"].between(1700, max_year)),
+        ("beds", ~df["beds"].between(0, 20)),
+        ("baths", ~df["baths"].between(0, 20)),
+    ]
+    for col, bad in checks:
+        bad = bad & df[col].notna()
+        if bad.any():
+            print(
+                f"WARNING: {int(bad.sum())} sales with implausible {col} "
+                f"(examples: {sorted(df.loc[bad, col].unique())[:5]}) — nulled"
+            )
+            df.loc[bad, col] = None
+    return df
+
+
 def main() -> None:
     PROCESSED.mkdir(parents=True, exist_ok=True)
     cv = clean_cville()
@@ -190,7 +228,7 @@ def main() -> None:
     df = df[df["sale_price"].between(30_000, 10_000_000)]
     ppsf = df["sale_price"] / df["sqft"]
     df = df[ppsf.between(40, 2000)]
-    df = df[df["year_built"].between(1700, 2027) | df["year_built"].isna()]
+    df = validate(df)
 
     df.to_parquet(PROCESSED / "sales.parquet", index=False)
     print(f"city {len(cv)}, county {len(al)}, merged {n0} -> filtered {len(df)}")

@@ -23,6 +23,7 @@ from .config import (
     MORTGAGE_RATE,
     PROCESSED,
     RAW,
+    SALES_START,
     SITE_DATA,
     STATE_FIPS,
     TERM_YEARS,
@@ -77,6 +78,9 @@ def main() -> None:
     SITE_DATA.mkdir(parents=True, exist_ok=True)
     factors = pd.read_parquet(PROCESSED / "factors.parquet")
     sales = pd.read_parquet(PROCESSED / "sales_geo.parquet")
+    # the cleaned data reaches back further for the era models; everything on
+    # this page describes the headline window only
+    sales = sales[sales["sale_date"] >= SALES_START]
     bg = load_bg()
 
     # map each BG to its area unit (BG itself, pooled tract, or locality)
@@ -117,7 +121,15 @@ def main() -> None:
         geoid, loc = g["GEOID"], g["locality"]
         r, key, pooled = area_row(geoid, loc)
         if r is None or geoid not in dist:
-            rows.append({"GEOID": geoid, "locality": loc, "factor": None})
+            rows.append(
+                {
+                    "GEOID": geoid,
+                    "locality": loc,
+                    "factor": None,
+                    "in_zone": int(loc == "cville"),
+                    "pooled": 0,
+                }
+            )
             continue
         factor = float(r["factor"])
         est_price = ref_price * factor
@@ -142,22 +154,22 @@ def main() -> None:
                 "drive_mo": int(round(drive_mo, -1)),
                 "allin_mo": int(round(mo_pay + drive_mo, -1)),
                 "allin2_mo": int(round(mo_pay + 2 * drive_mo, -1)),
-                "in_zone": loc == "cville",  # bikeable = city proper
-                "pooled": pooled,
+                # ints, not Python bools: the OGR GeoJSON driver would write
+                # bools as the strings "True"/"False"
+                "in_zone": int(loc == "cville"),  # bikeable = city proper
+                "pooled": int(pooled),
                 "unit": key,
             }
         )
 
     rows_df = pd.DataFrame(rows)
-    rent_path = PROCESSED / "rent_bg.parquet"
-    if rent_path.exists():
-        rent = pd.read_parquet(rent_path)
-        rent = rent[["bg_geoid", "acs_rent", "rent_factor", "pred_rent", "renters"]]
-        rent["rent_factor"] = rent["rent_factor"].round(3)
-        rent["pred_rent"] = rent["pred_rent"].round(0)
-        rows_df = rows_df.merge(
-            rent, left_on="GEOID", right_on="bg_geoid", how="left"
-        ).drop(columns="bg_geoid")
+    rent = pd.read_parquet(PROCESSED / "rent_bg.parquet")
+    rent = rent[["bg_geoid", "acs_rent", "rent_factor", "pred_rent", "renters"]]
+    rent["rent_factor"] = rent["rent_factor"].round(3)
+    rent["pred_rent"] = rent["pred_rent"].round(0)
+    rows_df = rows_df.merge(
+        rent, left_on="GEOID", right_on="bg_geoid", how="left"
+    ).drop(columns="bg_geoid")
 
     out = bg.merge(rows_df, on="GEOID", suffixes=("", "_x"))
     out["geometry"] = out["geometry"].simplify(0.0002, preserve_topology=True)

@@ -3,7 +3,8 @@
 log(price) ~ house attributes + year-quarter FE + area effect,
 where the area effect is a block-group dummy (pooled up to tract when a
 block group has too few sales). The exported price factor is
-exp(area effect), normalized so the sales-weighted average is 1.0.
+exp(area effect - sales-weighted mean effect), i.e. normalized so the
+sales-weighted GEOMETRIC mean factor is 1.0 ("typical location" = 1.00).
 
 Outputs:
   data/processed/factors.parquet  (one row per area unit)
@@ -16,13 +17,21 @@ import numpy as np
 import pandas as pd
 import pyfixest as pf
 
-from .config import MIN_SALES_PER_BG, PROCESSED
+from .config import MIN_SALES_PER_BG, PROCESSED, SALES_START
 
 
-def prepare() -> pd.DataFrame:
+def prepare(start: str = SALES_START, end: str | None = None) -> pd.DataFrame:
+    """Load geocoded sales, filter to a modeling window, build features."""
     df = pd.read_parquet(PROCESSED / "sales_geo.parquet")
+    df = df[df["sale_date"] >= start]
+    if end is not None:
+        df = df[df["sale_date"] <= end]
+    return build_features(df)
+
+
+def build_features(df: pd.DataFrame) -> pd.DataFrame:
     n0 = len(df)
-    df = df.dropna(subset=["bg_geoid", "sqft", "sale_price", "year_built"])
+    df = df.dropna(subset=["bg_geoid", "sqft", "sale_price", "year_built"]).copy()
     df = df[df["sqft"] > 0]
 
     df["log_price"] = np.log(df["sale_price"])
@@ -64,26 +73,66 @@ def fit(df: pd.DataFrame):
 
 
 def extract_factors(m, df: pd.DataFrame) -> pd.DataFrame:
-    coefs, ses = m.coef(), m.se()
-    areas = sorted(df["area"].unique())
-    ref = areas[0]  # dropped dummy: effect 0 by construction
-    fe = {ref: 0.0}
-    se = {ref: 0.0}
-    for a in areas[1:]:
-        key = f"C(area)[T.{a}]"
-        fe[a] = coefs[key]
-        se[a] = ses[key]
+    """Area effects re-centered on the sales-weighted mean, with delta-method
+    CIs from the full CRV1 covariance of the area dummies.
 
-    out = pd.DataFrame(
-        {"area": areas, "fe": [fe[a] for a in areas], "se": [se[a] for a in areas]}
-    )
-    # normalize: sales-weighted mean effect = 0 -> factor 1.0 = metro average
-    w = df["area"].value_counts()
-    out["n_sales"] = out["area"].map(w)
-    mean_fe = np.average(out["fe"], weights=out["n_sales"])
-    out["factor"] = np.exp(out["fe"] - mean_fe)
-    out["factor_lo"] = np.exp(out["fe"] - 1.96 * out["se"] - mean_fe)
-    out["factor_hi"] = np.exp(out["fe"] + 1.96 * out["se"] - mean_fe)
+    The reported quantity per area a is c_a = fe_a - Σ_b w_b·fe_b (w = sales
+    shares). Its variance is g'Σg where g is the gradient of c_a over the
+    estimated dummies (the dropped reference has fe = 0 with no uncertainty
+    of its own, but its *centered* effect still inherits variance from the
+    weighted mean — so no area gets a zero-width interval).
+    """
+    coefs = m.coef()
+    prefix, suffix = "C(area)[T.", "]"
+    dummy = {
+        n[len(prefix) : -len(suffix)]: n
+        for n in m._coefnames
+        if n.startswith(prefix) and n.endswith(suffix)
+    }
+    area_set = set(df["area"].unique())
+    unknown = set(dummy) - area_set
+    if unknown:
+        raise RuntimeError(f"model has area dummies not in the data: {sorted(unknown)}")
+    missing = area_set - set(dummy)
+    if len(missing) != 1:
+        raise RuntimeError(
+            "expected exactly one dropped reference area level, "
+            f"got {len(missing)}: {sorted(missing)[:5]}"
+        )
+    ref = missing.pop()
+    areas = sorted(area_set)
+    est = [a for a in areas if a != ref]  # areas with an estimated dummy
+
+    # sales-share weights over ALL areas (reference included)
+    counts = df["area"].value_counts()
+    w = np.array([counts[a] for a in areas], dtype=float)
+    w /= w.sum()
+
+    fe = np.array([0.0 if a == ref else float(coefs[dummy[a]]) for a in areas])
+    mean_fe = float(w @ fe)
+
+    # covariance of the estimated area dummies, aligned to `est`
+    names = list(m._coefnames)
+    cols = [names.index(dummy[a]) for a in est]
+    vcov = np.asarray(m._vcov)[np.ix_(cols, cols)]
+    w_est = np.array([w[areas.index(a)] for a in est])
+
+    pos = {a: i for i, a in enumerate(est)}
+    se_c = np.empty(len(areas))
+    for i, a in enumerate(areas):
+        g = -w_est.copy()
+        if a != ref:
+            g[pos[a]] += 1.0
+        se_c[i] = np.sqrt(g @ vcov @ g)
+
+    out = pd.DataFrame({"area": areas, "fe": fe, "se": se_c})
+    out["n_sales"] = out["area"].map(counts)
+    # normalize: sales-weighted mean effect = 0, i.e. the sales-weighted
+    # geometric mean factor = 1.0 ("typical location")
+    centered = fe - mean_fe
+    out["factor"] = np.exp(centered)
+    out["factor_lo"] = np.exp(centered - 1.96 * se_c)
+    out["factor_hi"] = np.exp(centered + 1.96 * se_c)
 
     stats = (
         df.assign(ppsf=df["sale_price"] / df["sqft"])

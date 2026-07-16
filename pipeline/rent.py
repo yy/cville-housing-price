@@ -15,38 +15,15 @@ import zipfile
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-import requests
 
 from .config import CITY_FIPS, COUNTY_FIPS, PROCESSED, RAW, SITE_DATA, STATE_FIPS
 
-ACS_TABLE_URL = (
-    "https://www2.census.gov/programs-surveys/acs/summary_file/2023/"
-    "table-based-SF/data/5YRData/acsdt5y2023-{table}.dat"
-)
-ACS_TABLES = ["b25064", "b25042", "b25032", "b25037", "b25003"]
-BG_PREFIX = [f"1500000US{STATE_FIPS}{c}" for c in (CITY_FIPS, COUNTY_FIPS)]
-
 
 def acs_table(table: str) -> pd.DataFrame:
-    """Download (cached) a nationwide ACS table file, filtered to our BGs."""
+    """Read a fetched ACS table containing the local block groups."""
     cache = RAW / f"acs_{table}_bg.csv"
     if not cache.exists():
-        r = requests.get(ACS_TABLE_URL.format(table=table), stream=True, timeout=600)
-        r.raise_for_status()
-        chunks = []
-        header = None
-        buf = ""
-        for chunk in r.iter_content(chunk_size=1 << 20):
-            buf += chunk.decode("utf-8", errors="replace")
-            lines = buf.split("\n")
-            buf = lines.pop()
-            for ln in lines:
-                if header is None:
-                    header = ln
-                elif ln.startswith(BG_PREFIX[0]) or ln.startswith(BG_PREFIX[1]):
-                    chunks.append(ln)
-        cache.write_text(header + "\n" + "\n".join(chunks))
-        print(f"  cached {cache.name} ({len(chunks)} rows)")
+        raise FileNotFoundError(f"missing {cache}; run the fetch workflow first")
     df = pd.read_csv(cache, sep="|", dtype={"GEO_ID": str})
     num = df.select_dtypes("number").columns
     df[num] = df[num].where(df[num] > -6666)  # ACS suppression sentinels

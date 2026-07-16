@@ -55,12 +55,27 @@ PUMS_URL = (
 # ACS API
 ACS_YEAR = 2023
 ACS_BASE = f"https://api.census.gov/data/{ACS_YEAR}/acs/acs5"
+ACS_TABLE_URL = (
+    f"https://www2.census.gov/programs-surveys/acs/summary_file/{ACS_YEAR}/"
+    f"table-based-SF/data/5YRData/acsdt5y{ACS_YEAR}-{{table}}.dat"
+)
+ACS_RENT_TABLES = ["b25064", "b25042", "b25032", "b25037", "b25003"]
 
 # Modeling window. Pre- and post-pandemic factor maps differ materially
-# (r≈0.65; the city's ~22% discount vs the county closed to parity), so the
-# headline model uses post-shock sales only.
+# (r≈0.67 across block groups; the city's ~18% discount vs the county closed
+# to a slight premium), so the headline model uses post-shock sales only.
+# Cleaning keeps a longer window (CLEAN_START) so per-era factors can be fit
+# from one cleaned dataset.
+CLEAN_START = "2018-01-01"
 SALES_START = "2023-01-01"
 MIN_SALES_PER_BG = 20
+
+# Ordered eras for the time-slider factor maps (last = headline window).
+# `end` is inclusive; None = open-ended.
+ERAS = [
+    {"key": "2018-19", "label": "2018–19", "start": "2018-01-01", "end": "2019-12-31"},
+    {"key": "2023+", "label": "2023+", "start": SALES_START, "end": None},
+]
 
 # Mortgage assumptions for the $/month translation
 MORTGAGE_RATE = 0.065  # 30-year fixed, annual

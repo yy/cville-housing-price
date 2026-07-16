@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Methodology — Charlottesville–Albemarle Housing Price Factor</title>
+<title>Methodology — Charlottesville / Housing price map</title>
 <link href="style.css" rel="stylesheet" />
 <style>
   body { position: static; background: #f9f9f7; }
@@ -44,19 +44,25 @@ The <em>area</em> term is a census-block-group fixed effect (block groups with
 fewer than 20 sales are pooled up to their tract, and thin tracts to the
 locality — these are flagged "pooled" in the panel). The <strong>price
 factor</strong> shown on the map is the exponentiated area effect, normalized so
-the sales-weighted average is 1.00. The window starts in 2023 deliberately:
-pre- and post-pandemic factor maps differ substantially (the city traded at a
-~22% discount to comparable county homes in 2018–19 and at parity by 2023+,
-with the largest gains in the city's historically cheapest neighborhoods), so
-mixing eras would show neither. A factor of 1.25 means the same house costs
-about 25% more there than the metro-wide expectation. The model explains about
-90% of the variance in log sale prices.
+the sales-weighted <em>geometric</em> mean factor is 1.00 — that is, 1.00 marks
+the typical location, not the arithmetic average. The headline window starts in
+2023 deliberately: pre- and post-pandemic factor maps differ substantially (the
+city traded at roughly an 18% discount to comparable county homes in 2018–19
+and at a slight premium by 2023+, with the largest gains in the city's
+historically cheapest neighborhoods), so mixing eras would show neither. The
+time slider under the map modes shows the 2018–19 factor map, fit with the
+same specification on that era's sales alone. A factor of 1.25 means the same
+house costs about 25% more there than the metro-wide expectation. The model
+explains about 88% of the variance in log sale prices (R² = 0.88).
 </p>
 <p>
 Sample filters: residential use codes (single-family detached/attached,
 condos), positive prices, county sales marked "Valid Improved" by the assessor,
-city sales screened by price-to-assessment ratio (0.35–3.0), multi-parcel deeds
-dropped, and basic sanity bounds on size and price per square foot.
+a price-to-assessment sanity band (0.35–3.0) applied to <em>both</em>
+localities, multi-parcel deeds dropped, and basic sanity bounds on size and
+price per square foot. Implausible attribute values (a year in the stories
+column, future construction years) are nulled with a warning at cleaning time
+rather than silently clipped.
 </p>
 
 <h2>Dollars per month</h2>
