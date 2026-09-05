@@ -21,13 +21,16 @@ from .config import (
     CVILLE_TABLES,
     PUMS_URL,
     RAW,
+    REFERENCE,
     STATE_FIPS,
     TIGER_FILES,
     ZORI_URL,
+    acs_table_path,
 )
 
 UA = {"User-Agent": "cville-housing-price/0.1 (open data research)"}
 GROUPS = ("cville", "albemarle", "census", "zori", "pums", "acs")
+DEFAULT_GROUPS = tuple(group for group in GROUPS if group != "acs")
 
 
 def get_with_retry(url: str, params: dict, tries: int = 5) -> dict:
@@ -174,7 +177,7 @@ def parse_args() -> argparse.Namespace:
         "--group",
         action="append",
         choices=GROUPS,
-        help="fetch only this source group; may be repeated (default: all)",
+        help="fetch only this source group; may be repeated (default: all except acs)",
     )
     parser.add_argument("--force", action="store_true", help="replace cached files")
     return parser.parse_args()
@@ -182,7 +185,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    selected = set(args.group or GROUPS)
+    selected = set(args.group or DEFAULT_GROUPS)
     force = args.force
     RAW.mkdir(parents=True, exist_ok=True)
 
@@ -213,9 +216,10 @@ def main() -> None:
         download(PUMS_URL, RAW / "pums_hva.zip", force)
 
     if "acs" in selected:
+        REFERENCE.mkdir(parents=True, exist_ok=True)
         print("ACS block-group tables:")
         for table in ACS_RENT_TABLES:
-            fetch_acs_table(table, RAW / f"acs_{table}_bg.csv", force)
+            fetch_acs_table(table, acs_table_path(table), force)
 
     print("done.")
 

@@ -1,4 +1,4 @@
-.PHONY: fetch refresh build model export validate serve
+.PHONY: fetch refresh refresh-acs build model export validate serve
 
 SNAKEMAKE = uv run snakemake --cores 2
 
@@ -8,6 +8,10 @@ fetch:
 refresh:
 	uv run python -m pipeline.fetch --group cville --group albemarle --group zori --force
 	$(SNAKEMAKE)
+
+# Run only when ACS_YEAR changes; commit the resulting reference snapshots.
+refresh-acs:
+	uv run python -m pipeline.fetch --group acs --force
 
 build:
 	$(SNAKEMAKE)

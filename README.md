@@ -29,11 +29,14 @@ characteristics-adjusted rent factor built from ACS PUMS.
 make fetch    # download any missing raw inputs
 make build    # build only missing or outdated outputs with Snakemake
 make refresh  # refresh city, county, and ZORI data, then rebuild affected outputs
+make refresh-acs # update tracked ACS snapshots after changing ACS_YEAR
 make validate # validate every generated map-data file
 make serve    # local preview at http://localhost:8321
 ```
 
 The default Snakemake target builds and validates every file under `site/data/`.
-Raw and processed data remain gitignored. The GitHub Pages workflow performs a
-clean build on every push to `main`, on manual dispatch, and weekly, so scheduled
-deployments fetch current inputs rather than relying on committed generated data.
+Raw and processed data remain gitignored. Filtered ACS block-group tables are
+year-versioned under `data/reference/` and tracked in Git; update `ACS_YEAR` and run
+`make refresh-acs` only when adopting a new ACS vintage. The GitHub Pages workflow
+performs a clean build on every push to `main`, on manual dispatch, and weekly, while
+scheduled deployments fetch the current non-ACS inputs.

@@ -4,6 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RAW = ROOT / "data" / "raw"
+REFERENCE = ROOT / "data" / "reference"
 MANUAL = ROOT / "data" / "manual"
 PROCESSED = ROOT / "data" / "processed"
 SITE_DATA = ROOT / "site" / "data"
@@ -60,6 +61,12 @@ ACS_TABLE_URL = (
     f"table-based-SF/data/5YRData/acsdt5y{ACS_YEAR}-{{table}}.dat"
 )
 ACS_RENT_TABLES = ["b25064", "b25042", "b25032", "b25037", "b25003"]
+
+
+def acs_table_path(table: str) -> Path:
+    """Return the tracked local snapshot path for an ACS table."""
+    return REFERENCE / f"acs_{ACS_YEAR}_{table}_bg.csv"
+
 
 # Modeling window. Pre- and post-pandemic factor maps differ materially
 # (r≈0.67 across block groups; the city's ~18% discount vs the county closed

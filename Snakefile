@@ -1,4 +1,8 @@
+from pipeline.config import ACS_RENT_TABLES, ACS_YEAR
+
+
 RAW = "data/raw"
+REFERENCE = "data/reference"
 PROCESSED = "data/processed"
 SITE_DATA = "site/data"
 ENV = ["pyproject.toml", "uv.lock"]
@@ -24,15 +28,11 @@ CENSUS_RAW = [
     f"{RAW}/tiger_puma.zip",
     f"{RAW}/tiger_zcta.zip",
 ]
-ACS_RAW = [
-    f"{RAW}/acs_b25064_bg.csv",
-    f"{RAW}/acs_b25042_bg.csv",
-    f"{RAW}/acs_b25032_bg.csv",
-    f"{RAW}/acs_b25037_bg.csv",
-    f"{RAW}/acs_b25003_bg.csv",
+ACS_REFERENCE = [
+    f"{REFERENCE}/acs_{ACS_YEAR}_{table}_bg.csv" for table in ACS_RENT_TABLES
 ]
 OTHER_RAW = [f"{RAW}/zori_zip.csv", f"{RAW}/pums_hva.zip"]
-ALL_RAW = CVILLE_RAW + ALBEMARLE_RAW + CENSUS_RAW + ACS_RAW + OTHER_RAW
+ALL_RAW = CVILLE_RAW + ALBEMARLE_RAW + CENSUS_RAW + OTHER_RAW
 
 SITE_OUTPUTS = [
     f"{SITE_DATA}/factors.geojson",
@@ -52,7 +52,7 @@ rule all:
 
 rule fetch_all:
     input:
-        ALL_RAW
+        ALL_RAW + ACS_REFERENCE
 
 
 rule fetch_cville:
@@ -86,17 +86,6 @@ rule fetch_census:
         CENSUS_RAW
     shell:
         "uv run python -m pipeline.fetch --group census --force"
-
-
-rule fetch_acs:
-    input:
-        "pipeline/fetch.py",
-        "pipeline/config.py",
-        *ENV,
-    output:
-        ACS_RAW
-    shell:
-        "uv run python -m pipeline.fetch --group acs --force"
 
 
 rule fetch_zori:
@@ -165,7 +154,7 @@ rule model:
 
 rule rent:
     input:
-        ACS_RAW
+        ACS_REFERENCE
         + [
             f"{RAW}/pums_hva.zip",
             f"{RAW}/tiger_puma.zip",

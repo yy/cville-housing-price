@@ -16,14 +16,22 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 
-from .config import CITY_FIPS, COUNTY_FIPS, PROCESSED, RAW, SITE_DATA, STATE_FIPS
+from .config import (
+    CITY_FIPS,
+    COUNTY_FIPS,
+    PROCESSED,
+    RAW,
+    SITE_DATA,
+    STATE_FIPS,
+    acs_table_path,
+)
 
 
 def acs_table(table: str) -> pd.DataFrame:
     """Read a fetched ACS table containing the local block groups."""
-    cache = RAW / f"acs_{table}_bg.csv"
+    cache = acs_table_path(table)
     if not cache.exists():
-        raise FileNotFoundError(f"missing {cache}; run the fetch workflow first")
+        raise FileNotFoundError(f"missing tracked ACS snapshot {cache}")
     df = pd.read_csv(cache, sep="|", dtype={"GEO_ID": str})
     num = df.select_dtypes("number").columns
     df[num] = df[num].where(df[num] > -6666)  # ACS suppression sentinels
