@@ -203,6 +203,9 @@ def dump_location_components(m, df: pd.DataFrame, factors: pd.DataFrame) -> None
 def main() -> None:
     df = prepare()
     m = fit(df)
+    # Pyfixest can drop rows (for example, a singleton year-quarter FE).
+    # Residuals and area weights must use the same rows as the fitted model.
+    df = m._data
     factors = extract_factors(m, df)
     factors.to_parquet(PROCESSED / "factors.parquet", index=False)
     dump_location_components(m, df, factors)
