@@ -51,6 +51,7 @@ def main() -> None:
     for era in ERAS:
         df = prepare(start=era["start"], end=era["end"])
         m = fit(df)
+        df = m._data
         factors = extract_factors(m, df)
         era_factors[era["key"]] = factors
         eras_meta.append(
